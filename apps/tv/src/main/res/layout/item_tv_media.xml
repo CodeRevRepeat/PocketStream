@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/cardContainer"
+    android:layout_width="240dp"
+    android:layout_height="146dp"
+    android:layout_marginEnd="18dp"
+    android:layout_marginVertical="8dp"
+    android:focusable="true"
+    android:clickable="true"
+    android:nextFocusUp="@+id/btnRefreshLibrary"
+    android:background="@drawable/bg_tv_glass_card_selector"
+    android:stateListAnimator="@animator/tv_focus_scale"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Top Row: Glass Format Chip -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/tvTvMediaBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_tv_glass_chip"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:text="MKV"
+            android:textColor="@color/tv_accent_cyan"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.06" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="▶"
+            android:textColor="@color/tv_accent_cyan_glow"
+            android:textSize="11sp"
+            android:alpha="0.7" />
+    </LinearLayout>
+
+    <!-- Title -->
+    <TextView
+        android:id="@+id/tvTvMediaTitle"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:text="Video Title"
+        android:textColor="@color/tv_text_primary"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:lineSpacingExtra="2dp" />
+
+    <!-- Subtitle (Resolution • Size) -->
+    <TextView
+        android:id="@+id/tvTvMediaSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="1080p • 2.5 GB"
+        android:textColor="@color/tv_text_secondary"
+        android:textSize="12sp"
+        android:fontFamily="sans-serif-medium" />
+
+</LinearLayout>

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="420dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:background="@drawable/bg_tv_glass_dialog"
+    android:paddingVertical="22dp"
+    android:paddingHorizontal="28dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="PAIR WITH POCKETSTREAM"
+        android:textColor="@color/tv_accent_cyan"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.08"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Scan this QR code using the PocketStream app on your phone"
+        android:textColor="@color/tv_text_secondary"
+        android:textSize="13sp"
+        android:gravity="center"
+        android:layout_marginBottom="14dp" />
+
+    <!-- QR Code Image Card (Compact 180dp so dialog & close button fit comfortably on TV) -->
+    <FrameLayout
+        android:layout_width="180dp"
+        android:layout_height="180dp"
+        android:background="@drawable/bg_tv_qr_frame"
+        android:padding="10dp"
+        android:layout_marginBottom="14dp">
+
+        <ImageView
+            android:id="@+id/ivTvQrCode"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/tvTvQrAddress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="TV IP: Initializing..."
+        tools:text="TV IP: 192.168.x.x:8085"
+        android:textColor="@color/tv_text_primary"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:id="@+id/tvTvQrStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Waiting for phone to scan or discover..."
+        android:textColor="@color/tv_text_secondary"
+        android:textSize="12sp"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/btnDismissQr"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_tv_glass_button_selector"
+        android:stateListAnimator="@animator/tv_focus_scale"
+        android:focusable="true"
+        android:text="Close"
+        android:textColor="@color/color_tv_glass_button_text"
+        android:textSize="13sp"
+        android:fontFamily="sans-serif-medium"
+        android:paddingHorizontal="32dp"
+        android:textAllCaps="false" />
+
+</LinearLayout>

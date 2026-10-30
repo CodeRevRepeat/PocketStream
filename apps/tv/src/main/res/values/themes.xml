@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.PocketStreamTV" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">@color/tv_accent_purple</item>
+        <item name="colorPrimaryVariant">@color/tv_accent_purple</item>
+        <item name="colorSecondary">@color/tv_accent_cyan</item>
+        <item name="android:windowBackground">@color/bg_tv</item>
+    </style>
+</resources>

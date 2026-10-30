@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Backgrounds -->
+    <color name="bg_tv">#080D1A</color>
+    <color name="bg_tv_gradient_start">#0D1629</color>
+    <color name="bg_tv_gradient_end">#050811</color>
+
+    <!-- Glass Morphism Fills -->
+    <color name="glass_btn_bg_top">#26334B73</color>
+    <color name="glass_btn_bg_bottom">#1A182338</color>
+    <color name="glass_btn_focused_top">#730284C7</color>
+    <color name="glass_btn_focused_center">#594F46E5</color>
+    <color name="glass_btn_focused_bottom">#4D2563EB</color>
+    <color name="glass_btn_pressed_top">#8C06B6D4</color>
+    <color name="glass_btn_pressed_bottom">#734F46E5</color>
+
+    <color name="glass_card_bg_top">#2224324D</color>
+    <color name="glass_card_bg_bottom">#14101A2B</color>
+    <color name="glass_card_focused_top">#47243B61</color>
+    <color name="glass_card_focused_bottom">#3313223D</color>
+    <color name="glass_pill_bg">#261E293B</color>
+    <color name="glass_chip_bg">#2038BDF8</color>
+
+    <!-- Glass Borders & Strokes -->
+    <color name="glass_stroke_unfocused">#38718EAD</color>
+    <color name="glass_stroke_focused">#38BDF8</color>
+    <color name="glass_stroke_subtle">#1FFFFFFF</color>
+    <color name="glass_stroke_badge">#4038BDF8</color>
+    <color name="glass_osd_border">#2B38BDF8</color>
+
+    <!-- Card compat -->
+    <color name="card_tv_bg">#1A1E293B</color>
+    <color name="card_tv_focused">#40243B61</color>
+
+    <!-- Brand & Accent Colors -->
+    <color name="tv_accent_cyan">#06B6D4</color>
+    <color name="tv_accent_cyan_glow">#38BDF8</color>
+    <color name="tv_accent_cyan_bright">#67E8F9</color>
+    <color name="tv_accent_purple">#8B5CF6</color>
+    <color name="tv_accent_indigo">#6366F1</color>
+    <color name="tv_accent_green">#10B981</color>
+    <color name="tv_accent_green_glow">#34D399</color>
+    <color name="tv_accent_red">#EF4444</color>
+    <color name="tv_accent_amber">#F59E0B</color>
+
+    <!-- Typography -->
+    <color name="tv_text_primary">#F8FAFC</color>
+    <color name="tv_text_secondary">#94A3B8</color>
+    <color name="tv_text_muted">#64748B</color>
+    <color name="tv_focus_stroke">#38BDF8</color>
+</resources>

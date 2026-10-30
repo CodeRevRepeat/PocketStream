@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_tv_ambient">
+
+    <!-- HOME / BROWSE VIEW -->
+    <LinearLayout
+        android:id="@+id/layoutHome"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:padding="36dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="28dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="POCKETSTREAM TV"
+                    android:textColor="@color/tv_accent_cyan"
+                    android:textSize="26sp"
+                    android:letterSpacing="0.08"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Direct Wi-Fi Streaming • Glass UI"
+                    android:textColor="@color/tv_text_muted"
+                    android:textSize="12sp"
+                    android:letterSpacing="0.04"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
+
+            <!-- Frosted Glass Connection Status Pill -->
+            <LinearLayout
+                android:id="@+id/llTvStatusPill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_tv_glass_pill"
+                android:paddingVertical="9dp"
+                android:paddingHorizontal="18dp">
+
+                <View
+                    android:id="@+id/vTvStatusDot"
+                    android:layout_width="10dp"
+                    android:layout_height="10dp"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/bg_tv_status_dot_online" />
+
+                <TextView
+                    android:id="@+id/tvTvPhoneStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Searching for PocketStream Phone..."
+                    tools:text="Connected to Phone (192.168.x.x:8080)"
+                    android:textColor="@color/tv_text_primary"
+                    android:textSize="14sp"
+                    android:fontFamily="sans-serif-medium" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Quick actions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:layout_marginBottom="32dp">
+
+            <Button
+                android:id="@+id/btnRefreshLibrary"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_tv_glass_button_selector"
+                android:stateListAnimator="@animator/tv_focus_scale"
+                android:focusable="true"
+                android:nextFocusDown="@+id/rvTvMediaList"
+                android:text="↻  Refresh Library"
+                android:textColor="@color/color_tv_glass_button_text"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium"
+                android:paddingHorizontal="20dp"
+                android:textAllCaps="false" />
+
+            <Button
+                android:id="@+id/btnPairPhone"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginStart="14dp"
+                android:background="@drawable/bg_tv_glass_button_selector"
+                android:stateListAnimator="@animator/tv_focus_scale"
+                android:focusable="true"
+                android:nextFocusDown="@+id/rvTvMediaList"
+                android:text="⊞  Pair Phone (QR Code)"
+                android:textColor="@color/color_tv_glass_button_text"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium"
+                android:paddingHorizontal="20dp"
+                android:textAllCaps="false" />
+
+            <Button
+                android:id="@+id/btnTestStream"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginStart="14dp"
+                android:background="@drawable/bg_tv_glass_button_selector"
+                android:stateListAnimator="@animator/tv_focus_scale"
+                android:focusable="true"
+                android:nextFocusDown="@+id/rvTvMediaList"
+                android:text="▶  Play Sample Video"
+                android:textColor="@color/color_tv_glass_button_text"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium"
+                android:paddingHorizontal="20dp"
+                android:textAllCaps="false" />
+        </LinearLayout>
+
+        <!-- Section: Available Videos -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Available on Phone"
+                android:textColor="@color/tv_text_primary"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Use Remote D-Pad to Select"
+                android:textColor="@color/tv_text_muted"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvTvEmptyNotice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No videos found on phone yet. Add videos on PocketStream Mobile and tap 'Refresh'."
+            android:textColor="@color/tv_text_secondary"
+            android:textSize="16sp"
+            android:layout_marginTop="20dp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvTvMediaList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:descendantFocusability="afterDescendants"
+            android:focusable="false"
+            android:nextFocusUp="@+id/btnRefreshLibrary"
+            android:paddingVertical="8dp" />
+
+    </LinearLayout>
+
+    <!-- FULLSCREEN PLAYER VIEW -->
+    <FrameLayout
+        android:id="@+id/layoutPlayer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/exoPlayerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:use_controller="false"
+            app:surface_type="texture_view"
+            app:resize_mode="fit" />
+
+        <!-- Frosted Glass OSD Overlay with Auto-Hide -->
+        <LinearLayout
+            android:id="@+id/layoutOsd"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_tv_glass_osd"
+            android:orientation="vertical"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:padding="28dp">
+
+            <TextView
+                android:id="@+id/tvPlayerTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Playing Video"
+                android:textColor="@color/tv_text_primary"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="12dp" />
+
+            <SeekBar
+                android:id="@+id/sbPlayerProgress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="1000"
+                android:progress="0"
+                android:focusable="true"
+                android:thumbTint="@color/tv_accent_cyan_glow"
+                android:progressTint="@color/tv_accent_cyan"
+                android:progressBackgroundTint="#4094A3B8"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/tvPlayerTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00:00 / 00:00"
+                    android:textColor="@color/tv_text_secondary"
+                    android:textSize="16sp"
+                    android:fontFamily="sans-serif-medium" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <!-- Restart / From Beginning -->
+                <Button
+                    android:id="@+id/btnPlayerRestart"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_tv_glass_button_selector"
+                    android:stateListAnimator="@animator/tv_focus_scale"
+                    android:focusable="true"
+                    android:text="|&lt;&lt; Restart"
+                    android:textColor="@color/color_tv_glass_button_text"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingHorizontal="14dp"
+                    android:textAllCaps="false" />
+
+                <Button
+                    android:id="@+id/btnPlayerRw"
+                    android:layout_width="68dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_tv_glass_button_selector"
+                    android:stateListAnimator="@animator/tv_focus_scale"
+                    android:focusable="true"
+                    android:text="-10s"
+                    android:textColor="@color/color_tv_glass_button_text"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium" />
+
+                <Button
+                    android:id="@+id/btnPlayerPlayPause"
+                    android:layout_width="88dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_tv_glass_button_selector"
+                    android:stateListAnimator="@animator/tv_focus_scale"
+                    android:focusable="true"
+                    android:text="Pause"
+                    android:textColor="@color/color_tv_glass_button_text"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium" />
+
+                <Button
+                    android:id="@+id/btnPlayerFf"
+                    android:layout_width="68dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_tv_glass_button_selector"
+                    android:stateListAnimator="@animator/tv_focus_scale"
+                    android:focusable="true"
+                    android:text="+10s"
+                    android:textColor="@color/color_tv_glass_button_text"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium" />
+
+                <!-- Decoder Mode Toggle: HW vs SW -->
+                <Button
+                    android:id="@+id/btnPlayerDecoder"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="14dp"
+                    android:background="@drawable/bg_tv_glass_button_selector"
+                    android:stateListAnimator="@animator/tv_focus_scale"
+                    android:focusable="true"
+                    android:text="Decoder: HW"
+                    android:textColor="@color/tv_accent_cyan_glow"
+                    android:textSize="11sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingHorizontal="12dp"
+                    android:textAllCaps="false" />
+
+                <Button
+                    android:id="@+id/btnPlayerStop"
+                    android:layout_width="80dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_tv_glass_button_selector"
+                    android:stateListAnimator="@animator/tv_focus_scale"
+                    android:focusable="true"
+                    android:text="✕ Exit"
+                    android:textColor="@color/color_tv_glass_button_text"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+</FrameLayout>
