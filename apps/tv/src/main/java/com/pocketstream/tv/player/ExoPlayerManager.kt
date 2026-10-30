@@ -77,12 +77,8 @@ class ExoPlayerManager(
                         Log.i(TAG, "ExoPlayer STATE_ENDED")
                         onPlaybackStateChange(false, duration, duration)
                     }
-                    Player.STATE_BUFFERING -> {
-                        Log.d(TAG, "ExoPlayer STATE_BUFFERING (current: $current ms, duration: $duration ms)")
-                    }
-                    Player.STATE_IDLE -> {
-                        Log.d(TAG, "ExoPlayer STATE_IDLE")
-                    }
+                    Player.STATE_BUFFERING -> {}
+                    Player.STATE_IDLE -> {}
                 }
             }
 

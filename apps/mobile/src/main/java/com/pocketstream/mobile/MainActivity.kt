@@ -76,11 +76,12 @@ class MainActivity : AppCompatActivity() {
     private var tvCapabilities: TvCapabilities = TvCapabilities.DEFAULT_1080P
     private var discoveryManager: MobileDiscoveryManager? = null
 
+    private val prefs by lazy { getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE) }
+    private fun resolvedTvIp(): String = connectedTvIp.ifEmpty { prefs.getString("last_tv_ip", "") ?: "" }
+
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        Log.i("MainActivity", "POST_NOTIFICATIONS granted: $isGranted")
-    }
+    ) { _ -> }
 
     private val qrScannerLauncher = registerForActivityResult(ScanContract()) { result ->
         if (result.contents != null) {
@@ -149,7 +150,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Restore last known TV connection
-        val prefs = getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE)
         val savedTvIp = prefs.getString("last_tv_ip", null)
         val savedTvPort = prefs.getInt("last_tv_port", 8085)
         val savedTvName = prefs.getString("last_tv_name", "Android TV") ?: "Android TV"
@@ -266,9 +266,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun syncTvPlaybackStatus() {
-        val tvIp = if (connectedTvIp.isNotEmpty()) connectedTvIp else {
-            getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE).getString("last_tv_ip", "") ?: ""
-        }
+        val tvIp = resolvedTvIp()
         if (tvIp.isEmpty()) return
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -316,7 +314,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleDebugIntent(intent: Intent?) {
         val action = intent?.getStringExtra("action") ?: return
-        Log.i("MainActivity", "Received debug intent action: $action")
         lifecycleScope.launch(Dispatchers.Main) {
             when (action) {
                 "stop_server" -> {
@@ -334,7 +331,6 @@ class MainActivity : AppCompatActivity() {
                         attempts++
                     }
                     val target = if (mediaId != null) items.find { it.id == mediaId } else items.firstOrNull()
-                    Log.i("MainActivity", "Target media for stream: ${target?.title}")
                     target?.let { handleStreamSelection(it) }
                 }
                 "show_remote" -> {
@@ -486,7 +482,6 @@ class MainActivity : AppCompatActivity() {
                 val progress = seekBar?.progress ?: 0
                 if (tvTotalDurationMs > 0) {
                     val seekTo = (progress.toDouble() / 1000.0 * tvTotalDurationMs).toLong()
-                    Log.i("MainActivity", "Mobile Scrubber seeking to $seekTo ms")
                     sendTvControl("SEEK", seekTo)
                 }
             }
@@ -536,13 +531,10 @@ class MainActivity : AppCompatActivity() {
                         attempts++
                     }
                 }
-                Log.i("MainActivity", "Local server ready=$isReady after ${attempts * 120}ms")
                 delay(200)
 
                 discoveryManager?.broadcastDiscoverTv()
-                val targetIp = if (connectedTvIp.isNotEmpty()) connectedTvIp else {
-                    getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE).getString("last_tv_ip", "") ?: ""
-                }
+                val targetIp = resolvedTvIp()
                 if (targetIp.isNotEmpty()) {
                     sendPairHandshake(targetIp, connectedTvPort)
                     delay(400)
@@ -755,12 +747,10 @@ class MainActivity : AppCompatActivity() {
                 tvProgress.text = "Hardware Transcode: $percent%"
             },
             onCompleted = { _ ->
-                Log.i("MainActivity", "Hardware transcoding completed for ${media.title}")
                 // If TV is currently streaming this media, switch TV to the progressive seekable MP4!
                 if (activeStreamingMediaId == media.id) {
                     val currentPos = tvCurrentPosMs
                     val transcodedUrl = "http://$localIp:8080/stream/transcoded/${media.id}"
-                    Log.i("MainActivity", "Seamlessly switching TV to progressive MP4 stream at position $currentPos ms")
                     sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, duration, startPositionMs = currentPos)
                 }
             },
@@ -849,11 +839,7 @@ class MainActivity : AppCompatActivity() {
         durationMs: Long = 0L,
         startPositionMs: Long = 0L
     ) {
-        val tvIp = if (connectedTvIp.isNotEmpty()) {
-            connectedTvIp
-        } else {
-            getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE).getString("last_tv_ip", "") ?: ""
-        }
+        val tvIp = resolvedTvIp()
         if (tvIp.isEmpty()) {
             Toast.makeText(this, "Please pair with your TV first using QR code or Auto-Discovery", Toast.LENGTH_LONG).show()
             return
@@ -918,11 +904,7 @@ class MainActivity : AppCompatActivity() {
     private fun startTvStatusSync() {
         statusSyncJob?.cancel()
         statusSyncJob = lifecycleScope.launch(Dispatchers.IO) {
-            val tvIp = if (connectedTvIp.isNotEmpty()) {
-                connectedTvIp
-            } else {
-                getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE).getString("last_tv_ip", "") ?: ""
-            }
+            val tvIp = resolvedTvIp()
             if (tvIp.isEmpty()) return@launch
 
             val tvPort = connectedTvPort
@@ -977,11 +959,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun sendTvControl(action: String, positionMs: Long = 0L) {
-        val tvIp = if (connectedTvIp.isNotEmpty()) {
-            connectedTvIp
-        } else {
-            getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE).getString("last_tv_ip", "") ?: ""
-        }
+        val tvIp = resolvedTvIp()
         if (tvIp.isEmpty()) return
 
         val tvPort = connectedTvPort
@@ -996,8 +974,7 @@ class MainActivity : AppCompatActivity() {
                 val body = json.toString().toRequestBody("application/json".toMediaType())
                 val request = Request.Builder().url(controlUrl).post(body).build()
                 httpClient.newCall(request).execute()
-            } catch (e: Exception) {
-                Log.w("MainActivity", "Failed sending TV control: ${e.message}")
+            } catch (_: Exception) {
             }
         }
     }
@@ -1019,7 +996,7 @@ class MainActivity : AppCompatActivity() {
         connectedTvName = tvName
         updateTvTargetUI(tvIp, tvPort, tvName, isPaired = true)
 
-        getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE).edit()
+        prefs.edit()
             .putString("last_tv_ip", tvIp)
             .putInt("last_tv_port", tvPort)
             .putString("last_tv_name", tvName)
@@ -1067,13 +1044,12 @@ class MainActivity : AppCompatActivity() {
                     if (capsJson != null) {
                         val parsed = TvCapabilities.fromJson(capsJson)
                         tvCapabilities = parsed
-                        getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE).edit()
+                        prefs.edit()
                             .putString("last_tv_caps", capsJson.toString())
                             .apply()
                         withContext(Dispatchers.Main) {
                             updateTvTargetUI(tvIp, tvPort, connectedTvName, isPaired = true)
                         }
-                        Log.i("MainActivity", "TV Capabilities received via handshake: ${parsed.maxWidth}x${parsed.maxHeight}, 10BitHEVC=${parsed.supports10BitHevc}")
                     }
                 }
             } catch (_: Exception) {}
@@ -1091,22 +1067,19 @@ class MainActivity : AppCompatActivity() {
                     val capsJson = JSONObject(resBody)
                     val parsed = TvCapabilities.fromJson(capsJson)
                     tvCapabilities = parsed
-                    getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE).edit()
+                    prefs.edit()
                         .putString("last_tv_caps", capsJson.toString())
                         .apply()
                     withContext(Dispatchers.Main) {
                         updateTvTargetUI(tvIp, tvPort, connectedTvName, isPaired = true)
                     }
-                    Log.i("MainActivity", "TV Capabilities fetched: ${parsed.maxWidth}x${parsed.maxHeight}, 10BitHEVC=${parsed.supports10BitHevc}")
                 }
             } catch (_: Exception) {}
         }
     }
 
     private fun notifyTvDisconnected() {
-        val targetIp = if (connectedTvIp.isNotEmpty()) connectedTvIp else {
-            getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE).getString("last_tv_ip", "") ?: ""
-        }
+        val targetIp = resolvedTvIp()
         val targetPort = connectedTvPort
         if (targetIp.isNotEmpty()) {
             try {
@@ -1115,18 +1088,14 @@ class MainActivity : AppCompatActivity() {
                     .post("{}".toRequestBody("application/json".toMediaType()))
                     .build()
                 httpClient.newCall(req).execute().close()
-                Log.i("MainActivity", "Sent /disconnect to TV at $targetIp:$targetPort")
-            } catch (e: Exception) {
-                Log.w("MainActivity", "Could not send /disconnect to TV: ${e.message}")
+            } catch (_: Exception) {
             }
         }
     }
 
     private fun notifyTvLibraryUpdated() {
         if (!ServerService.isServerRunning) return
-        val targetIp = if (connectedTvIp.isNotEmpty()) connectedTvIp else {
-            getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE).getString("last_tv_ip", "") ?: ""
-        }
+        val targetIp = resolvedTvIp()
         val targetPort = connectedTvPort
         if (targetIp.isNotEmpty()) {
             lifecycleScope.launch(Dispatchers.IO) {
@@ -1136,9 +1105,7 @@ class MainActivity : AppCompatActivity() {
                         .post("{}".toRequestBody("application/json".toMediaType()))
                         .build()
                     httpClient.newCall(req).execute().close()
-                    Log.i("MainActivity", "Sent /refresh to TV at $targetIp:$targetPort")
-                } catch (e: Exception) {
-                    Log.w("MainActivity", "Could not send /refresh to TV: ${e.message}")
+                } catch (_: Exception) {
                 }
             }
         }

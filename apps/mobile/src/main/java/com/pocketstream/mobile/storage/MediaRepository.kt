@@ -174,8 +174,7 @@ object MediaRepository {
         if (doc.isDirectory) {
             val children = try {
                 doc.listFiles()
-            } catch (t: Throwable) {
-                Log.w(TAG, "Cannot list files in ${doc.name}: ${t.message}")
+            } catch (_: Throwable) {
                 emptyArray()
             }
             for (child in children) {

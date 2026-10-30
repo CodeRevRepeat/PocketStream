@@ -57,6 +57,13 @@ class ServerService : Service() {
             }
             context.startService(intent)
         }
+
+        private val disconnectClient by lazy {
+            okhttp3.OkHttpClient.Builder()
+                .connectTimeout(1, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(1, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+        }
     }
 
     private var httpServer: PocketHttpServer? = null
@@ -120,7 +127,6 @@ class ServerService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, buildNotification("Streaming active at $serverUrl"))
             }
-            Log.i(TAG, "PocketStream server running at $serverUrl")
         } catch (e: Exception) {
             Log.e(TAG, "Failed starting HTTP server: ${e.message}", e)
             stopSelf()
@@ -139,7 +145,6 @@ class ServerService : Service() {
             wakeLock = null
             isServerRunning = false
             serverUrl = ""
-            Log.i(TAG, "PocketStream server stopped and all cache/converted files purged")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping server: ${e.message}")
         }
@@ -153,19 +158,13 @@ class ServerService : Service() {
             if (tvIp.isNotEmpty()) {
                 Thread {
                     try {
-                        val client = okhttp3.OkHttpClient.Builder()
-                            .connectTimeout(1, java.util.concurrent.TimeUnit.SECONDS)
-                            .readTimeout(1, java.util.concurrent.TimeUnit.SECONDS)
-                            .build()
                         val body = "{}".toRequestBody("application/json".toMediaType())
                         val req = okhttp3.Request.Builder()
                             .url("http://$tvIp:$tvPort/disconnect")
                             .post(body)
                             .build()
-                        client.newCall(req).execute().close()
-                        Log.i(TAG, "Notified TV at $tvIp:$tvPort of disconnect")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Could not notify TV of disconnect: ${e.message}")
+                        disconnectClient.newCall(req).execute().close()
+                    } catch (_: Exception) {
                     }
                 }.start()
             }
@@ -186,13 +185,15 @@ class ServerService : Service() {
         }
     }
 
-    private fun buildNotification(text: String): Notification {
+    private fun openAppPendingIntent(): PendingIntent {
         val openAppIntent = Intent(this, MainActivity::class.java)
-        val pendingOpen = PendingIntent.getActivity(
+        return PendingIntent.getActivity(
             this, 0, openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
 
+    private fun buildNotification(text: String): Notification {
         val stopIntent = Intent(this, ServerService::class.java).apply {
             action = ACTION_STOP
         }
@@ -205,7 +206,7 @@ class ServerService : Service() {
             .setContentTitle("PocketStream Server Running")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentIntent(pendingOpen)
+            .setContentIntent(openAppPendingIntent())
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", pendingStop)
             .setOngoing(true)
             .build()
@@ -213,16 +214,11 @@ class ServerService : Service() {
 
     fun updateNotificationText(title: String, message: String) {
         val manager = getSystemService(NotificationManager::class.java) ?: return
-        val openAppIntent = Intent(this, MainActivity::class.java)
-        val pendingOpen = PendingIntent.getActivity(
-            this, 0, openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(message)
             .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentIntent(pendingOpen)
+            .setContentIntent(openAppPendingIntent())
             .setOngoing(true)
             .build()
         manager.notify(NOTIFICATION_ID, notif)

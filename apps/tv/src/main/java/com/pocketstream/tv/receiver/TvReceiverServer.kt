@@ -30,8 +30,6 @@ class TvReceiverServer(
         val uri = session.uri
         val method = session.method
 
-        Log.d(TAG, "TV Receiver: $method $uri")
-
         if (method == Method.OPTIONS) {
             val res = newFixedLengthResponse(Response.Status.OK, "text/plain", "")
             return addCorsHeaders(res)

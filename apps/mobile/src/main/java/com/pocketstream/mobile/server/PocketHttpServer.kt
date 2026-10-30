@@ -23,6 +23,8 @@ class PocketHttpServer(
     port: Int = 8080
 ) : NanoHTTPD(port) {
 
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     companion object {
         private const val TAG = "PocketHttpServer"
         private const val STREAM_BUFFER_SIZE = 64 * 1024 // 64 KB buffer for high-bitrate video streaming
@@ -39,8 +41,6 @@ class PocketHttpServer(
     override fun serve(session: IHTTPSession): Response {
         val uri = session.uri
         val method = session.method
-
-        Log.d(TAG, "HTTP $method $uri (Range: ${session.headers["range"]})")
 
         if (method == Method.OPTIONS) {
             val res = newFixedLengthResponse(Response.Status.OK, "text/plain", "")
@@ -199,12 +199,8 @@ class PocketHttpServer(
                     TranscoderManager.startLiveTranscode(
                         context = context,
                         media = media,
-                        onReadyToStream = {
-                            Log.i(TAG, "Live auto-transcode ready for TV stream: ${media.title}")
-                        },
-                        onCompleted = {
-                            Log.i(TAG, "Hardware auto-transcode completed for ${media.title}")
-                        }
+                        onReadyToStream = {},
+                        onCompleted = {}
                     )
                     "http://$ip:$listeningPort/stream/live/${media.id}"
                 }
@@ -215,7 +211,7 @@ class PocketHttpServer(
                     notifMsg
                 )
 
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                mainHandler.post {
                     android.widget.Toast.makeText(context, notifMsg, android.widget.Toast.LENGTH_LONG).show()
                 }
 
@@ -238,7 +234,7 @@ class PocketHttpServer(
                     notifMsg
                 )
 
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                mainHandler.post {
                     android.widget.Toast.makeText(context, notifMsg, android.widget.Toast.LENGTH_SHORT).show()
                 }
 
@@ -287,7 +283,6 @@ class PocketHttpServer(
             }
 
             if (active.length() > 0) {
-                Log.i(TAG, "Streaming live fragmented MP4 chunks to TV for $mediaId (${active.length()} bytes)")
                 val stream = GrowingFileInputStream(active, mediaId)
                 val res = newChunkedResponse(Response.Status.OK, "video/mp4", stream)
                 res.addHeader("Accept-Ranges", "none")
@@ -368,7 +363,6 @@ class PocketHttpServer(
         // If a progressive transcoded version exists, serve that directly for 100% smooth seekable playback!
         val completed = TranscoderManager.getTranscodedFile(context, mediaId)
         if (completed != null) {
-            Log.i(TAG, "handleStream: Found completed progressive file for $mediaId, serving progressive MP4")
             return serveLocalFile(completed, "video/mp4", session)
         }
 
@@ -380,7 +374,6 @@ class PocketHttpServer(
 
         // If 10-bit and actively transcoding, route to live stream so TV doesn't crash on raw 10-bit HEVC
         if (media.is10Bit && TranscoderManager.isTranscoding(mediaId)) {
-            Log.i(TAG, "handleStream: 10-bit file $mediaId is actively transcoding, routing to live stream")
             return handleLiveOrTranscodedStream(mediaId, session)
         }
 

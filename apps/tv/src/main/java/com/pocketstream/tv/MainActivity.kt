@@ -191,12 +191,10 @@ class MainActivity : AppCompatActivity() {
                 },
                 onControlRequested = { action, pos ->
                     runOnUiThread {
-                        android.util.Log.i("MainActivity", "Receiver onControlRequested: action=$action, pos=$pos (isPlaying=$isPlaying, curPos=$currentPositionMs)")
                         when (action.uppercase()) {
                             "PLAY" -> if (!isPlaying) playerManager?.togglePlayPause()
                             "PAUSE" -> if (isPlaying) playerManager?.togglePlayPause()
                             "SEEK" -> {
-                                android.util.Log.i("MainActivity", "Remote SEEK to $pos ms")
                                 seekToSafe(pos)
                                 showOsd()
                             }
@@ -204,7 +202,6 @@ class MainActivity : AppCompatActivity() {
                             "RW" -> {
                                 val cur = playerManager?.getCurrentTime() ?: currentPositionMs
                                 val target = (cur - 10000L).coerceAtLeast(0L)
-                                android.util.Log.i("MainActivity", "Remote RW -10s: cur=$cur -> target=$target ms")
                                 seekToSafe(target)
                                 showOsd()
                             }
@@ -212,7 +209,6 @@ class MainActivity : AppCompatActivity() {
                                 val cur = playerManager?.getCurrentTime() ?: currentPositionMs
                                 val maxDur = if (totalDurationMs > 0) totalDurationMs else Long.MAX_VALUE
                                 val target = (cur + 10000L).coerceAtMost(maxDur)
-                                android.util.Log.i("MainActivity", "Remote FF +10s: cur=$cur -> target=$target ms")
                                 seekToSafe(target)
                                 showOsd()
                             }
@@ -279,7 +275,6 @@ class MainActivity : AppCompatActivity() {
         binding.btnPlayerRw.setOnClickListener {
             val cur = playerManager?.getCurrentTime() ?: currentPositionMs
             val target = (cur - 10000L).coerceAtLeast(0L)
-            android.util.Log.i("MainActivity", "OSD RW -10s: cur=$cur -> target=$target ms")
             seekToSafe(target)
             resetOsdTimer()
         }
@@ -288,7 +283,6 @@ class MainActivity : AppCompatActivity() {
             val cur = playerManager?.getCurrentTime() ?: currentPositionMs
             val maxDur = if (totalDurationMs > 0) totalDurationMs else Long.MAX_VALUE
             val target = (cur + 10000L).coerceAtMost(maxDur)
-            android.util.Log.i("MainActivity", "OSD FF +10s: cur=$cur -> target=$target ms")
             seekToSafe(target)
             resetOsdTimer()
         }
@@ -313,7 +307,6 @@ class MainActivity : AppCompatActivity() {
                 val effectiveLen = if (totalDurationMs > 0) totalDurationMs else (playerManager?.getDuration() ?: 0L)
                 if (effectiveLen > 0) {
                     val seekTo = (progress.toDouble() / 1000.0 * effectiveLen).toLong()
-                    android.util.Log.i("MainActivity", "TV Scrubber seekTo: $seekTo ms")
                     seekToSafe(seekTo)
                 }
                 resetOsdTimer()
@@ -473,10 +466,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun onPhoneDisconnected() {
         if (isPlaying || binding.layoutPlayer.visibility == View.VISIBLE) {
-            android.util.Log.i("MainActivity", "onPhoneDisconnected ignored because playback is currently active")
             return
         }
-        android.util.Log.i("MainActivity", "onPhoneDisconnected: Updating TV UI immediately")
         phoneBaseUrl = ""
         connectedPhoneName = ""
         updatePhoneConnectionUi(false, "Phone disconnected")
@@ -522,7 +513,6 @@ class MainActivity : AppCompatActivity() {
                         consecutiveFailures = 0
                         withContext(Dispatchers.Main) {
                             if (phoneBaseUrl.isNotEmpty() && !isPlaying) {
-                                android.util.Log.i("MainActivity", "Health check failed: phone server unreachable (4 consecutive failures)")
                                 onPhoneDisconnected()
                             }
                         }
@@ -684,7 +674,6 @@ class MainActivity : AppCompatActivity() {
                     val cur = playerManager?.getCurrentTime() ?: currentPositionMs
                     val maxDur = if (totalDurationMs > 0) totalDurationMs else Long.MAX_VALUE
                     val target = (cur + 10000L).coerceAtMost(maxDur)
-                    android.util.Log.i("MainActivity", "Hardware FF: cur=$cur -> target=$target")
                     seekToSafe(target)
                     showOsd()
                     return true
@@ -694,7 +683,6 @@ class MainActivity : AppCompatActivity() {
                 KeyEvent.KEYCODE_MEDIA_STEP_BACKWARD -> {
                     val cur = playerManager?.getCurrentTime() ?: currentPositionMs
                     val target = (cur - 10000L).coerceAtLeast(0L)
-                    android.util.Log.i("MainActivity", "Hardware RW: cur=$cur -> target=$target")
                     seekToSafe(target)
                     showOsd()
                     return true
@@ -730,10 +718,8 @@ class MainActivity : AppCompatActivity() {
                     withContext(Dispatchers.Main) {
                         if (isReady) {
                             val progressiveUrl = "$phoneBaseUrl/stream/transcoded/$mediaId"
-                            android.util.Log.i("MainActivity", "Switching to progressive URL on seek: $progressiveUrl at $targetMs ms")
                             startPlayback(progressiveUrl, currentTitle, totalDurationMs, startPositionMs = targetMs)
                         } else {
-                            android.util.Log.w("MainActivity", "Seek blocked: Video transcode is still preparing/buffering")
                             Toast.makeText(this@MainActivity, "Buffering stream... Seeking will be ready shortly", Toast.LENGTH_SHORT).show()
                         }
                     }

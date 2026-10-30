@@ -50,7 +50,6 @@ object TranscoderManager {
         
         // If mp4 exists without .done marker and not actively transcoding, it's an abandoned partial file! Clean it up!
         if (file.exists() && !doneMarker.exists() && !isTranscoding(id)) {
-            Log.w(TAG, "Found incomplete/orphaned transcode file for $id. Deleting.")
             file.delete()
         }
         return null
@@ -107,7 +106,6 @@ object TranscoderManager {
 
         val existing = getTranscodedFile(context, media.id)
         if (existing != null) {
-            Log.i(TAG, "File already transcoded for ${media.id}")
             onReadyToStream(existing)
             onCompleted(existing)
             return
@@ -116,7 +114,6 @@ object TranscoderManager {
         if (isTranscoding(media.id)) {
             val file = getActiveOrCompletedFile(context, media.id)
             if (file != null && file.length() > 1024 * 1024) {
-                Log.i(TAG, "Transcode already in progress, ready to stream")
                 onReadyToStream(file)
                 return
             }
@@ -163,7 +160,6 @@ object TranscoderManager {
             .setAudioMimeType(MimeTypes.AUDIO_AAC)
             .addListener(object : Transformer.Listener {
                 override fun onCompleted(composition: Composition, exportResult: ExportResult) {
-                    Log.i(TAG, "Hardware transcoding finished for ${media.title}. Repacking into seekable progressive MP4...")
                     sanitizeAvcLevel(outputFile)
 
                     val tempProgressive = File(context.cacheDir, "temp_prog_${media.id}.mp4")
@@ -172,10 +168,8 @@ object TranscoderManager {
                         outputFile.delete()
                         tempProgressive.renameTo(outputFile)
                         sanitizeAvcLevel(outputFile)
-                        Log.i(TAG, "Transcoded video repacked to progressive MP4! Seekable=true (${outputFile.length()} bytes)")
                         outputFile
                     } else {
-                        Log.w(TAG, "Remux fallback to original output file")
                         outputFile
                     }
 
@@ -232,7 +226,6 @@ object TranscoderManager {
                         if (!readyDispatched && outputFile.exists() && hasEnoughBuffer) {
                             readyDispatched = true
                             sanitizeAvcLevel(outputFile)
-                            Log.i(TAG, "Fragmented MP4 buffered $fileLen bytes in ${elapsedMs}ms. Dispatching onReadyToStream!")
                             handler.post {
                                 onReadyToStream(outputFile)
                             }
@@ -263,14 +256,12 @@ object TranscoderManager {
             activeTransformer?.cancel()
             activeTransformer = null
             inProgress.clear()
-            Log.i(TAG, "Active transcode cancelled.")
             if (context != null) {
                 for (id in activeIds) {
                     val partialFile = File(context.cacheDir, "transcoded_$id.mp4")
                     val doneMarker = File(context.cacheDir, "transcoded_$id.done")
                     if (!doneMarker.exists() && partialFile.exists()) {
                         partialFile.delete()
-                        Log.i(TAG, "Deleted partial file: ${partialFile.name}")
                     }
                 }
             }
@@ -310,7 +301,6 @@ object TranscoderManager {
                                     raf.write(0x2A)
                                     raf.seek(absSpsLevel)
                                     raf.write(0x2A)
-                                    Log.i(TAG, "Sanitized AVC level at offset $absAvcCLevel from 0x${levelByte.toString(16)} to Level 4.2 (0x2A)")
                                 }
                             }
                             searchIdx = idx + 4
@@ -318,8 +308,7 @@ object TranscoderManager {
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not sanitize AVC level: ${e.message}")
+        } catch (_: Exception) {
         }
     }
 
@@ -327,8 +316,6 @@ object TranscoderManager {
         var extractor: MediaExtractor? = null
         var muxer: MediaMuxer? = null
         try {
-            Log.i(TAG, "Starting remux of ${inputFile.name} to progressive MP4...")
-            val startTime = System.currentTimeMillis()
             extractor = MediaExtractor()
             extractor.setDataSource(inputFile.absolutePath)
 
@@ -366,7 +353,6 @@ object TranscoderManager {
             }
 
             muxer.stop()
-            Log.i(TAG, "Remux completed in ${System.currentTimeMillis() - startTime}ms (${outputFile.length()} bytes)")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Remux failed: ${e.message}", e)
@@ -403,8 +389,6 @@ object TranscoderManager {
             }
             completedFiles.clear()
             inProgress.clear()
-            val mb = deletedBytes / (1024 * 1024.0)
-            Log.i(TAG, "purgeAllCache: Completely removed $deletedCount cache and converted file(s) ($mb MB).")
         } catch (e: Exception) {
             Log.e(TAG, "Error purging cache: ${e.message}", e)
         }
@@ -434,8 +418,7 @@ object TranscoderManager {
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Cache cleanup error: ${e.message}")
+        } catch (_: Exception) {
         }
     }
 }
