@@ -194,12 +194,15 @@
         android:id="@+id/layoutPlayer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:background="@android:color/black"
         android:visibility="gone">
 
         <androidx.media3.ui.PlayerView
             android:id="@+id/exoPlayerView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:background="@android:color/black"
+            app:shutter_background_color="@android:color/black"
             app:use_controller="false"
             app:surface_type="surface_view"
             app:resize_mode="fit" />

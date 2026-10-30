@@ -557,6 +557,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnPlayerDecoder.text = "ExoPlayer HW"
 
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK))
         binding.layoutHome.visibility = View.GONE
         binding.layoutPlayer.visibility = View.VISIBLE
         binding.layoutPlayer.bringToFront()
@@ -577,6 +578,7 @@ class MainActivity : AppCompatActivity() {
     private fun stopPlayback() {
         osdHandler.removeCallbacks(hideOsdRunnable)
         playerManager?.stop()
+        window.setBackgroundDrawableResource(R.color.bg_tv)
         binding.layoutPlayer.visibility = View.GONE
         binding.layoutHome.visibility = View.VISIBLE
         binding.layoutHome.bringToFront()
