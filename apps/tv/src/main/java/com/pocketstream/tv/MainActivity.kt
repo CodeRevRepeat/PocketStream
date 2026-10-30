@@ -1,5 +1,6 @@
 package com.pocketstream.tv
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -89,6 +90,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
     private fun setupRecyclerView() {
         adapter = TvMediaAdapter(emptyList()) { item ->
             requestPlaybackFromPhone(item)
@@ -176,6 +182,10 @@ class MainActivity : AppCompatActivity() {
                 port = 8085,
                 onPlayRequested = { streamUrl, title, durationMs, startPositionMs ->
                     runOnUiThread {
+                        val bringToFront = Intent(this@MainActivity, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        }
+                        startActivity(bringToFront)
                         startPlayback(streamUrl, title, durationMs, startPositionMs)
                     }
                 },
@@ -462,6 +472,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onPhoneDisconnected() {
+        if (isPlaying || binding.layoutPlayer.visibility == View.VISIBLE) {
+            android.util.Log.i("MainActivity", "onPhoneDisconnected ignored because playback is currently active")
+            return
+        }
         android.util.Log.i("MainActivity", "onPhoneDisconnected: Updating TV UI immediately")
         phoneBaseUrl = ""
         connectedPhoneName = ""
@@ -483,6 +497,10 @@ class MainActivity : AppCompatActivity() {
             var consecutiveFailures = 0
             while (isActive) {
                 kotlinx.coroutines.delay(3500)
+                if (isPlaying || binding.layoutPlayer.visibility == View.VISIBLE) {
+                    consecutiveFailures = 0
+                    continue
+                }
                 if (phoneBaseUrl.isNotEmpty()) {
                     try {
                         val pingReq = Request.Builder()
@@ -500,11 +518,11 @@ class MainActivity : AppCompatActivity() {
                         consecutiveFailures++
                     }
 
-                    if (consecutiveFailures >= 2) {
+                    if (consecutiveFailures >= 4) {
                         consecutiveFailures = 0
                         withContext(Dispatchers.Main) {
-                            if (phoneBaseUrl.isNotEmpty()) {
-                                android.util.Log.i("MainActivity", "Health check failed: phone server unreachable (2 consecutive failures)")
+                            if (phoneBaseUrl.isNotEmpty() && !isPlaying) {
+                                android.util.Log.i("MainActivity", "Health check failed: phone server unreachable (4 consecutive failures)")
                                 onPhoneDisconnected()
                             }
                         }
@@ -551,6 +569,10 @@ class MainActivity : AppCompatActivity() {
 
         binding.layoutHome.visibility = View.GONE
         binding.layoutPlayer.visibility = View.VISIBLE
+        binding.layoutPlayer.bringToFront()
+        binding.exoPlayerView.visibility = View.VISIBLE
+        binding.exoPlayerView.bringToFront()
+        binding.layoutOsd.bringToFront()
         binding.tvPlayerTitle.text = title
 
         // Instantly display known movie duration and initial start time on the OSD
@@ -567,6 +589,7 @@ class MainActivity : AppCompatActivity() {
         playerManager?.stop()
         binding.layoutPlayer.visibility = View.GONE
         binding.layoutHome.visibility = View.VISIBLE
+        binding.layoutHome.bringToFront()
         binding.btnRefreshLibrary.requestFocus()
 
         if (phoneBaseUrl.isNotEmpty()) {
