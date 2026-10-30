@@ -92,6 +92,7 @@ object TranscoderManager {
     fun startLiveTranscode(
         context: Context,
         media: LocalMedia,
+        startPositionMs: Long = 0L,
         onReadyToStream: (File) -> Unit,
         onProgress: (Int) -> Unit = {},
         onCompleted: (File) -> Unit = {},
@@ -99,23 +100,32 @@ object TranscoderManager {
     ) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             Handler(Looper.getMainLooper()).post {
-                startLiveTranscode(context, media, onReadyToStream, onProgress, onCompleted, onError)
+                startLiveTranscode(context, media, startPositionMs, onReadyToStream, onProgress, onCompleted, onError)
             }
             return
         }
 
-        val existing = getTranscodedFile(context, media.id)
-        if (existing != null) {
-            onReadyToStream(existing)
-            onCompleted(existing)
-            return
-        }
-
-        if (isTranscoding(media.id)) {
-            val file = getActiveOrCompletedFile(context, media.id)
-            if (file != null && file.length() > 1024 * 1024) {
-                onReadyToStream(file)
+        if (startPositionMs > 0L) {
+            cancelActive(context)
+            completedFiles.remove(media.id)
+            val outputFile = File(context.cacheDir, "transcoded_${media.id}.mp4")
+            val doneMarker = File(context.cacheDir, "transcoded_${media.id}.done")
+            if (outputFile.exists()) outputFile.delete()
+            if (doneMarker.exists()) doneMarker.delete()
+        } else {
+            val existing = getTranscodedFile(context, media.id)
+            if (existing != null) {
+                onReadyToStream(existing)
+                onCompleted(existing)
                 return
+            }
+
+            if (isTranscoding(media.id)) {
+                val file = getActiveOrCompletedFile(context, media.id)
+                if (file != null && file.length() > 1024 * 1024) {
+                    onReadyToStream(file)
+                    return
+                }
             }
         }
 
@@ -173,13 +183,15 @@ object TranscoderManager {
                         outputFile
                     }
 
-                    try {
-                        File(context.cacheDir, "transcoded_${media.id}.done").createNewFile()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to create .done marker: ${e.message}")
+                    if (startPositionMs == 0L) {
+                        try {
+                            File(context.cacheDir, "transcoded_${media.id}.done").createNewFile()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to create .done marker: ${e.message}")
+                        }
+                        completedFiles[media.id] = finalFile
                     }
                     inProgress.remove(media.id)
-                    completedFiles[media.id] = finalFile
                     handler.post {
                         onCompleted(finalFile)
                     }
@@ -206,7 +218,18 @@ object TranscoderManager {
         activeTransformer = transformer
 
         try {
-            val inputMediaItem = Media3Item.fromUri(media.uri)
+            val inputMediaItem = if (startPositionMs > 0L) {
+                Media3Item.Builder()
+                    .setUri(media.uri)
+                    .setClippingConfiguration(
+                        Media3Item.ClippingConfiguration.Builder()
+                            .setStartPositionMs(startPositionMs)
+                            .build()
+                    )
+                    .build()
+            } else {
+                Media3Item.fromUri(media.uri)
+            }
             transformer.start(inputMediaItem, outputFile.absolutePath)
 
             var readyDispatched = false

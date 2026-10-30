@@ -58,6 +58,43 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var currentPositionMs = 0L
     @Volatile private var totalDurationMs = 0L
     @Volatile private var isPlaying = false
+    private var currentSeekOffsetMs = 0L
+    private var tvPreparingCountdownJob: kotlinx.coroutines.Job? = null
+
+    private fun getCurrentEffectiveTime(): Long {
+        val raw = playerManager?.getCurrentTime() ?: currentPositionMs
+        return if (currentStreamUrl.contains("/stream/live/")) currentSeekOffsetMs + raw else raw
+    }
+
+    private fun showTvPreparing(targetPositionMs: Long) {
+        binding.layoutTvPreparing.visibility = View.VISIBLE
+        binding.layoutTvPreparing.bringToFront()
+        binding.tvTvPreparingTitle.text = "Seeking to ${formatDuration(targetPositionMs)}"
+        binding.tvTvPreparingSubtitle.text = "Hardware-encoding video stream to ensure smooth, stutter-free playback."
+        binding.tvTvPreparingCountdown.text = "Starting stream in 30s..."
+        binding.pbTvPreparingCountdown.progress = 0
+        binding.btnTvCancelPreparing.setOnClickListener {
+            dismissTvPreparing()
+            stopPlayback()
+        }
+
+        tvPreparingCountdownJob?.cancel()
+        tvPreparingCountdownJob = CoroutineScope(Dispatchers.Main).launch {
+            val totalSeconds = 30
+            for (secRemaining in totalSeconds downTo 1) {
+                binding.tvTvPreparingCountdown.text = "Starting stream in ${secRemaining}s..."
+                binding.pbTvPreparingCountdown.progress = totalSeconds - secRemaining
+                kotlinx.coroutines.delay(1000)
+            }
+            binding.tvTvPreparingCountdown.text = "Buffering stream..."
+        }
+    }
+
+    private fun dismissTvPreparing() {
+        tvPreparingCountdownJob?.cancel()
+        tvPreparingCountdownJob = null
+        binding.layoutTvPreparing.visibility = View.GONE
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -161,11 +198,12 @@ class MainActivity : AppCompatActivity() {
             onPlaybackStateChange = { playing, timeMs, lengthMs ->
                 runOnUiThread {
                     isPlaying = playing
-                    currentPositionMs = timeMs
-                    if (lengthMs > 0) {
+                    val effectivePos = if (currentStreamUrl.contains("/stream/live/")) currentSeekOffsetMs + timeMs else timeMs
+                    currentPositionMs = effectivePos
+                    if (lengthMs > 0 && totalDurationMs <= 0) {
                         totalDurationMs = lengthMs
                     }
-                    updatePlaybackUi(playing, timeMs, lengthMs)
+                    updatePlaybackUi(playing, effectivePos, totalDurationMs)
                 }
             },
             onError = { err ->
@@ -194,19 +232,25 @@ class MainActivity : AppCompatActivity() {
                         when (action.uppercase()) {
                             "PLAY" -> if (!isPlaying) playerManager?.togglePlayPause()
                             "PAUSE" -> if (isPlaying) playerManager?.togglePlayPause()
+                            "PREPARING_SEEK" -> {
+                                playerManager?.pause()
+                                showTvPreparing(pos)
+                                currentPositionMs = pos
+                                updatePlaybackUi(playing = false, timeMs = pos, lengthMs = totalDurationMs)
+                            }
                             "SEEK" -> {
                                 seekToSafe(pos)
                                 showOsd()
                             }
                             "STOP" -> stopPlayback()
                             "RW" -> {
-                                val cur = playerManager?.getCurrentTime() ?: currentPositionMs
+                                val cur = getCurrentEffectiveTime()
                                 val target = (cur - 10000L).coerceAtLeast(0L)
                                 seekToSafe(target)
                                 showOsd()
                             }
                             "FF" -> {
-                                val cur = playerManager?.getCurrentTime() ?: currentPositionMs
+                                val cur = getCurrentEffectiveTime()
                                 val maxDur = if (totalDurationMs > 0) totalDurationMs else Long.MAX_VALUE
                                 val target = (cur + 10000L).coerceAtMost(maxDur)
                                 seekToSafe(target)
@@ -273,14 +317,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnPlayerRw.setOnClickListener {
-            val cur = playerManager?.getCurrentTime() ?: currentPositionMs
+            val cur = getCurrentEffectiveTime()
             val target = (cur - 10000L).coerceAtLeast(0L)
             seekToSafe(target)
             resetOsdTimer()
         }
 
         binding.btnPlayerFf.setOnClickListener {
-            val cur = playerManager?.getCurrentTime() ?: currentPositionMs
+            val cur = getCurrentEffectiveTime()
             val maxDur = if (totalDurationMs > 0) totalDurationMs else Long.MAX_VALUE
             val target = (cur + 10000L).coerceAtMost(maxDur)
             seekToSafe(target)
@@ -549,11 +593,14 @@ class MainActivity : AppCompatActivity() {
         durationMs: Long = 0L,
         startPositionMs: Long = 0L
     ) {
+        dismissTvPreparing()
         currentStreamUrl = streamUrl
         currentTitle = title
+        currentSeekOffsetMs = if (streamUrl.contains("/stream/live/")) startPositionMs else 0L
         if (durationMs > 0) {
             totalDurationMs = durationMs
         }
+        currentPositionMs = startPositionMs
 
         binding.btnPlayerDecoder.text = "ExoPlayer HW"
 
@@ -576,6 +623,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopPlayback() {
+        dismissTvPreparing()
+        currentSeekOffsetMs = 0L
         osdHandler.removeCallbacks(hideOsdRunnable)
         playerManager?.stop()
         window.setBackgroundDrawableResource(R.color.bg_tv)
@@ -673,7 +722,7 @@ class MainActivity : AppCompatActivity() {
                 KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
                 KeyEvent.KEYCODE_MEDIA_NEXT,
                 KeyEvent.KEYCODE_MEDIA_STEP_FORWARD -> {
-                    val cur = playerManager?.getCurrentTime() ?: currentPositionMs
+                    val cur = getCurrentEffectiveTime()
                     val maxDur = if (totalDurationMs > 0) totalDurationMs else Long.MAX_VALUE
                     val target = (cur + 10000L).coerceAtMost(maxDur)
                     seekToSafe(target)
@@ -683,7 +732,7 @@ class MainActivity : AppCompatActivity() {
                 KeyEvent.KEYCODE_MEDIA_REWIND,
                 KeyEvent.KEYCODE_MEDIA_PREVIOUS,
                 KeyEvent.KEYCODE_MEDIA_STEP_BACKWARD -> {
-                    val cur = playerManager?.getCurrentTime() ?: currentPositionMs
+                    val cur = getCurrentEffectiveTime()
                     val target = (cur - 10000L).coerceAtLeast(0L)
                     seekToSafe(target)
                     showOsd()
@@ -700,33 +749,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun seekToSafe(targetMs: Long) {
-        val isSeekable = playerManager?.isSeekable() ?: false
-        if (isSeekable) {
+        // Direct play stream: ExoPlayer supports instant Range seeking!
+        if (!currentStreamUrl.contains("/stream/live/")) {
             playerManager?.seekTo(targetMs)
             return
         }
 
-        // Stream is not directly seekable yet (e.g. actively transcoding live stream).
+        // Live hardware-encoded stream:
         val mediaId = extractMediaId(currentStreamUrl)
-        if (mediaId.isNotEmpty()) {
+        if (mediaId.isNotEmpty() && phoneBaseUrl.isNotEmpty()) {
+            playerManager?.pause()
+            showTvPreparing(targetMs)
+            currentPositionMs = targetMs
+            updatePlaybackUi(playing = false, timeMs = targetMs, lengthMs = totalDurationMs)
+
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    val statusUrl = "$phoneBaseUrl/api/v1/transcode/status?id=$mediaId"
-                    val req = Request.Builder().url(statusUrl).build()
-                    val res = httpClient.newCall(req).execute()
-                    val body = res.body?.string() ?: ""
-                    val json = org.json.JSONObject(body)
-                    val isReady = json.optBoolean("isReady", false)
-                    withContext(Dispatchers.Main) {
-                        if (isReady) {
-                            val progressiveUrl = "$phoneBaseUrl/stream/transcoded/$mediaId"
-                            startPlayback(progressiveUrl, currentTitle, totalDurationMs, startPositionMs = targetMs)
-                        } else {
-                            Toast.makeText(this@MainActivity, "Buffering stream... Seeking will be ready shortly", Toast.LENGTH_SHORT).show()
-                        }
+                    val json = org.json.JSONObject().apply {
+                        put("mediaId", mediaId)
+                        put("positionMs", targetMs)
                     }
+                    val body = json.toString().toRequestBody("application/json".toMediaType())
+                    val req = Request.Builder()
+                        .url("$phoneBaseUrl/api/v1/transcode/seek")
+                        .post(body)
+                        .build()
+                    httpClient.newCall(req).execute().close()
                 } catch (e: Exception) {
-                    android.util.Log.w("MainActivity", "Failed checking transcode status: ${e.message}")
+                    android.util.Log.e("MainActivity", "Failed to send transcode seek: ${e.message}")
                 }
             }
         }
@@ -758,6 +808,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        dismissTvPreparing()
         healthCheckJob?.cancel()
         discoveryManager?.stop()
         qrDialog?.dismiss()

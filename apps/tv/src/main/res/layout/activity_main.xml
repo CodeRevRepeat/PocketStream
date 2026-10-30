@@ -207,6 +207,83 @@
             app:surface_type="surface_view"
             app:resize_mode="fit" />
 
+        <!-- Seeking / Preparing 30s Countdown Overlay -->
+        <LinearLayout
+            android:id="@+id/layoutTvPreparing"
+            android:layout_width="440dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:background="@drawable/bg_tv_glass_dialog"
+            android:paddingVertical="24dp"
+            android:paddingHorizontal="32dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/pbTvPreparingSpinner"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/tv_accent_cyan"
+                android:layout_marginBottom="14dp" />
+
+            <TextView
+                android:id="@+id/tvTvPreparingTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Buffering Stream"
+                android:textColor="@color/tv_accent_cyan"
+                android:textSize="19sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <TextView
+                android:id="@+id/tvTvPreparingSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Hardware-encoding video stream to ensure smooth, stutter-free playback."
+                android:textColor="@color/tv_text_secondary"
+                android:textSize="13sp"
+                android:gravity="center"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/tvTvPreparingCountdown"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Starting stream in 30s..."
+                android:textColor="@color/tv_text_primary"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="10dp" />
+
+            <ProgressBar
+                android:id="@+id/pbTvPreparingCountdown"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="8dp"
+                android:max="30"
+                android:progress="0"
+                android:progressTint="@color/tv_accent_cyan"
+                android:progressBackgroundTint="#3338BDF8"
+                android:layout_marginBottom="16dp" />
+
+            <Button
+                android:id="@+id/btnTvCancelPreparing"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_tv_glass_button_selector"
+                android:stateListAnimator="@animator/tv_focus_scale"
+                android:focusable="true"
+                android:text="Cancel"
+                android:textColor="@color/color_tv_glass_button_text"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:paddingHorizontal="28dp"
+                android:textAllCaps="false" />
+        </LinearLayout>
+
         <!-- Frosted Glass OSD Overlay with Auto-Hide -->
         <LinearLayout
             android:id="@+id/layoutOsd"

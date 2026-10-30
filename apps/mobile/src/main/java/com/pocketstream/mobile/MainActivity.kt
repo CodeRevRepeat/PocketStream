@@ -457,7 +457,20 @@ class MainActivity : AppCompatActivity() {
             sendTvControl("FF")
         }
         binding.btnRemoteRestart.setOnClickListener {
-            sendTvControl("RESTART")
+            val currentMedia = activeStreamingMediaId?.let { MediaRepository.getMediaById(it) }
+            val isLiveTranscoded = currentMedia != null && (
+                TranscoderManager.isTranscoding(currentMedia.id) ||
+                currentMedia.is10Bit ||
+                activeStreamingMediaTitle.contains("[Live", ignoreCase = true) ||
+                activeStreamingMediaTitle.contains("[Converted", ignoreCase = true)
+            ) && TranscoderManager.getTranscodedFile(this@MainActivity, currentMedia.id) == null
+
+            if (isLiveTranscoded && currentMedia != null) {
+                val localIp = NetworkUtils.getLocalWifiIpAddress()
+                startLiveStreamingAndTranscoding(currentMedia, localIp, startPositionMs = 0L)
+            } else {
+                sendTvControl("RESTART")
+            }
         }
         binding.btnRemoteStop.setOnClickListener {
             sendTvControl("STOP")
@@ -482,7 +495,20 @@ class MainActivity : AppCompatActivity() {
                 val progress = seekBar?.progress ?: 0
                 if (tvTotalDurationMs > 0) {
                     val seekTo = (progress.toDouble() / 1000.0 * tvTotalDurationMs).toLong()
-                    sendTvControl("SEEK", seekTo)
+                    val currentMedia = activeStreamingMediaId?.let { MediaRepository.getMediaById(it) }
+                    val isLiveTranscoded = currentMedia != null && (
+                        TranscoderManager.isTranscoding(currentMedia.id) ||
+                        currentMedia.is10Bit ||
+                        activeStreamingMediaTitle.contains("[Live", ignoreCase = true) ||
+                        activeStreamingMediaTitle.contains("[Converted", ignoreCase = true)
+                    ) && TranscoderManager.getTranscodedFile(this@MainActivity, currentMedia.id) == null
+
+                    if (isLiveTranscoded && currentMedia != null) {
+                        val localIp = NetworkUtils.getLocalWifiIpAddress()
+                        startLiveStreamingAndTranscoding(currentMedia, localIp, startPositionMs = seekTo)
+                    } else {
+                        sendTvControl("SEEK", seekTo)
+                    }
                 }
             }
         })
@@ -683,7 +709,12 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun startLiveStreamingAndTranscoding(media: LocalMedia, localIp: String) {
+    fun handleSeekAndTranscode(media: LocalMedia, positionMs: Long) {
+        val localIp = NetworkUtils.getLocalWifiIpAddress()
+        startLiveStreamingAndTranscoding(media, localIp, startPositionMs = positionMs)
+    }
+
+    private fun startLiveStreamingAndTranscoding(media: LocalMedia, localIp: String, startPositionMs: Long = 0L) {
         if (media.durationMs <= 0L) {
             try {
                 val mmr = android.media.MediaMetadataRetriever()
@@ -698,14 +729,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val duration = media.durationMs
-        val existing = TranscoderManager.getTranscodedFile(this, media.id)
-        if (existing != null) {
-            val transcodedUrl = "http://$localIp:8080/stream/transcoded/${media.id}"
-            sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, duration)
-            return
+        if (startPositionMs == 0L) {
+            val existing = TranscoderManager.getTranscodedFile(this, media.id)
+            if (existing != null) {
+                val transcodedUrl = "http://$localIp:8080/stream/transcoded/${media.id}"
+                sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, duration)
+                return
+            }
         }
 
-        val liveUrl = "http://$localIp:8080/stream/live/${media.id}"
+        // If seeking to a position, notify TV immediately so TV can pause and show preparing countdown
+        if (startPositionMs > 0L) {
+            sendTvControl("PREPARING_SEEK", startPositionMs)
+        }
+
+        val liveUrl = "http://$localIp:8080/stream/live/${media.id}?t=${System.currentTimeMillis()}"
 
         // Custom Preparing Dialog with 30s Countdown and Live Transcoding Progress
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_preparing_stream, null)
@@ -713,6 +751,10 @@ class MainActivity : AppCompatActivity() {
         val pbCountdown = dialogView.findViewById<ProgressBar>(R.id.pbPreparingCountdown)
         val tvProgress = dialogView.findViewById<TextView>(R.id.tvPreparingProgress)
         val btnCancel = dialogView.findViewById<Button>(R.id.btnCancelPreparing)
+        val tvTitle = dialogView.findViewById<TextView>(R.id.tvPreparingTitle)
+        if (startPositionMs > 0L && tvTitle != null) {
+            tvTitle.text = "Seeking to ${formatTime(startPositionMs)}"
+        }
 
         val dialog = AlertDialog.Builder(this)
             .setView(dialogView)
@@ -739,6 +781,7 @@ class MainActivity : AppCompatActivity() {
         TranscoderManager.startLiveTranscode(
             context = applicationContext,
             media = media,
+            startPositionMs = startPositionMs,
             onReadyToStream = {
                 // Background chunks buffering
             },
@@ -747,8 +790,8 @@ class MainActivity : AppCompatActivity() {
                 tvProgress.text = "Hardware Transcode: $percent%"
             },
             onCompleted = { _ ->
-                // If TV is currently streaming this media, switch TV to the progressive seekable MP4!
-                if (activeStreamingMediaId == media.id) {
+                // If TV is currently streaming this media from 0, switch TV to the progressive seekable MP4!
+                if (startPositionMs == 0L && activeStreamingMediaId == media.id) {
                     val currentPos = tvCurrentPosMs
                     val transcodedUrl = "http://$localIp:8080/stream/transcoded/${media.id}"
                     sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, duration, startPositionMs = currentPos)
@@ -777,14 +820,14 @@ class MainActivity : AppCompatActivity() {
             if (!isStreamDispatched && !isFinishing && !isDestroyed) {
                 isStreamDispatched = true
                 dialog.dismiss()
-                val readyFile = TranscoderManager.getTranscodedFile(this@MainActivity, media.id)
+                val readyFile = if (startPositionMs == 0L) TranscoderManager.getTranscodedFile(this@MainActivity, media.id) else null
                 val urlToSend = if (readyFile != null) {
                     "http://$localIp:8080/stream/transcoded/${media.id}"
                 } else {
                     liveUrl
                 }
                 val streamTitle = if (readyFile != null) "[Converted] ${media.title}" else "[Live 8-bit] ${media.title}"
-                sendStreamToTv(urlToSend, streamTitle, media.id, duration)
+                sendStreamToTv(urlToSend, streamTitle, media.id, duration, startPositionMs = startPositionMs)
             }
         }
     }

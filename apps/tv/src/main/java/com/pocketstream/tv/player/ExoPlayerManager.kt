@@ -113,7 +113,7 @@ class ExoPlayerManager(
 
         val mediaItem = MediaItem.fromUri(Uri.parse(streamUrl))
         player.setMediaItem(mediaItem)
-        if (startPositionMs > 0L) {
+        if (startPositionMs > 0L && !streamUrl.contains("/stream/live/")) {
             player.seekTo(startPositionMs)
         }
         player.prepare()
@@ -127,6 +127,14 @@ class ExoPlayerManager(
         } else {
             player.play()
         }
+    }
+
+    fun pause() {
+        exoPlayer?.pause()
+    }
+
+    fun resume() {
+        exoPlayer?.play()
     }
 
     fun seekRelative(deltaMs: Long) {

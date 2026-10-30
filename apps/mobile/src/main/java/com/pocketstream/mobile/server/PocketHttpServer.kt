@@ -79,7 +79,7 @@ class PocketHttpServer(
             }
 
             uri.startsWith("/stream/live/") -> {
-                val mediaId = uri.removePrefix("/stream/live/").substringBefore("/")
+                val mediaId = uri.removePrefix("/stream/live/").substringBefore("/").substringBefore("?")
                 if (!mediaId.matches(SAFE_MEDIA_ID_REGEX)) {
                     newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid media ID format")
                 } else {
@@ -88,7 +88,7 @@ class PocketHttpServer(
             }
 
             uri.startsWith("/stream/transcoded/") -> {
-                val mediaId = uri.removePrefix("/stream/transcoded/").substringBefore("/")
+                val mediaId = uri.removePrefix("/stream/transcoded/").substringBefore("/").substringBefore("?")
                 if (!mediaId.matches(SAFE_MEDIA_ID_REGEX)) {
                     newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid media ID format")
                 } else {
@@ -97,12 +97,16 @@ class PocketHttpServer(
             }
 
             uri.startsWith("/stream/") -> {
-                val mediaId = uri.removePrefix("/stream/").substringBefore("/")
+                val mediaId = uri.removePrefix("/stream/").substringBefore("/").substringBefore("?")
                 if (!mediaId.matches(SAFE_MEDIA_ID_REGEX)) {
                     newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid media ID format")
                 } else {
                     handleStream(mediaId, session)
                 }
+            }
+
+            uri == "/api/v1/transcode/seek" && method == Method.POST -> {
+                handleTranscodeSeekRequest(session)
             }
 
             uri == "/api/v1/transcode/status" && method == Method.GET -> {
@@ -262,6 +266,29 @@ class PocketHttpServer(
         )
         MainActivity.instance?.onTvPlaybackStopped()
         return newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"stopped\"}")
+    }
+
+    private fun handleTranscodeSeekRequest(session: IHTTPSession): Response {
+        val map = mutableMapOf<String, String>()
+        session.parseBody(map)
+        val postData = map["postData"] ?: ""
+        return try {
+            val json = JSONObject(postData)
+            val mediaId = json.getString("mediaId")
+            val positionMs = json.optLong("positionMs", 0L)
+            val localMedia = MediaRepository.getMediaById(mediaId)
+            if (localMedia != null) {
+                mainHandler.post {
+                    MainActivity.instance?.handleSeekAndTranscode(localMedia, positionMs)
+                }
+                newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"seeking\",\"mediaId\":\"$mediaId\",\"positionMs\":$positionMs}")
+            } else {
+                newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Media not found: $mediaId")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling transcode seek request: ${e.message}", e)
+            newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Error: ${e.message}")
+        }
     }
 
     private fun handleLiveOrTranscodedStream(mediaId: String, session: IHTTPSession): Response {
