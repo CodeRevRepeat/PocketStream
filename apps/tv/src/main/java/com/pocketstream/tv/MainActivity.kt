@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.pocketstream.protocol.MediaItem
 import com.pocketstream.tv.databinding.ActivityMainBinding
 import com.pocketstream.tv.player.ExoPlayerManager
+import com.pocketstream.tv.player.AudioTrackInfo
 import com.pocketstream.tv.receiver.TvReceiverServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,6 +61,10 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var isPlaying = false
     private var currentSeekOffsetMs = 0L
     private var tvPreparingCountdownJob: kotlinx.coroutines.Job? = null
+    private var availableAudioTracks: List<AudioTrackInfo> = emptyList()
+    private var isUserScrubbing = false
+    private var scrubTargetMs = -1L
+    private var seekDebounceJob: kotlinx.coroutines.Job? = null
 
     private fun getCurrentEffectiveTime(): Long {
         val raw = playerManager?.getCurrentTime() ?: currentPositionMs
@@ -71,7 +76,7 @@ class MainActivity : AppCompatActivity() {
         binding.layoutTvPreparing.bringToFront()
         binding.tvTvPreparingTitle.text = "Seeking to ${formatDuration(targetPositionMs)}"
         binding.tvTvPreparingSubtitle.text = "Hardware-encoding video stream to ensure smooth, stutter-free playback."
-        binding.tvTvPreparingCountdown.text = "Starting stream in 30s..."
+        binding.tvTvPreparingCountdown.text = "Starting stream in 15s..."
         binding.pbTvPreparingCountdown.progress = 0
         binding.btnTvCancelPreparing.setOnClickListener {
             dismissTvPreparing()
@@ -80,7 +85,7 @@ class MainActivity : AppCompatActivity() {
 
         tvPreparingCountdownJob?.cancel()
         tvPreparingCountdownJob = CoroutineScope(Dispatchers.Main).launch {
-            val totalSeconds = 30
+            val totalSeconds = 15
             for (secRemaining in totalSeconds downTo 1) {
                 binding.tvTvPreparingCountdown.text = "Starting stream in ${secRemaining}s..."
                 binding.pbTvPreparingCountdown.progress = totalSeconds - secRemaining
@@ -211,7 +216,18 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Playback Error: $err", Toast.LENGTH_LONG).show()
                 }
             }
-        )
+        ).apply {
+            onAudioTracksChanged = { tracks ->
+                runOnUiThread {
+                    updateAudioTracksUi(tracks)
+                }
+            }
+            onSubtitlesChanged = { hasSubtitles, areSubtitlesEnabled ->
+                runOnUiThread {
+                    updateSubtitlesUi(hasSubtitles, areSubtitlesEnabled)
+                }
+            }
+        }
     }
 
     private fun setupReceiverServer() {
@@ -331,6 +347,77 @@ class MainActivity : AppCompatActivity() {
             resetOsdTimer()
         }
 
+        binding.sbPlayerProgress.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                binding.sbPlayerProgress.animate().scaleY(1.3f).setDuration(150).start()
+                resetOsdTimer()
+            } else {
+                binding.sbPlayerProgress.animate().scaleY(1.0f).setDuration(150).start()
+                if (isUserScrubbing) {
+                    seekDebounceJob?.cancel()
+                    commitScrubSeek()
+                }
+            }
+        }
+
+        binding.sbPlayerProgress.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                val effectiveLen = if (totalDurationMs > 0) totalDurationMs else (playerManager?.getDuration() ?: 0L)
+                if (effectiveLen <= 0) return@setOnKeyListener false
+
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        isUserScrubbing = true
+                        resetOsdTimer()
+                        if (scrubTargetMs < 0) {
+                            scrubTargetMs = getCurrentEffectiveTime()
+                        }
+                        val step = if (event.repeatCount > 4) 30000L else 10000L
+                        scrubTargetMs = (scrubTargetMs - step).coerceAtLeast(0L)
+                        val prog = ((scrubTargetMs.toDouble() / effectiveLen.toDouble()) * 1000.0).toInt().coerceIn(0, 1000)
+                        binding.sbPlayerProgress.progress = prog
+                        binding.tvPlayerTime.text = "${formatDuration(scrubTargetMs)} / ${formatDuration(effectiveLen)}"
+
+                        seekDebounceJob?.cancel()
+                        seekDebounceJob = CoroutineScope(Dispatchers.Main).launch {
+                            kotlinx.coroutines.delay(800)
+                            commitScrubSeek()
+                        }
+                        return@setOnKeyListener true
+                    }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        isUserScrubbing = true
+                        resetOsdTimer()
+                        if (scrubTargetMs < 0) {
+                            scrubTargetMs = getCurrentEffectiveTime()
+                        }
+                        val step = if (event.repeatCount > 4) 30000L else 10000L
+                        scrubTargetMs = (scrubTargetMs + step).coerceAtMost(effectiveLen)
+                        val prog = ((scrubTargetMs.toDouble() / effectiveLen.toDouble()) * 1000.0).toInt().coerceIn(0, 1000)
+                        binding.sbPlayerProgress.progress = prog
+                        binding.tvPlayerTime.text = "${formatDuration(scrubTargetMs)} / ${formatDuration(effectiveLen)}"
+
+                        seekDebounceJob?.cancel()
+                        seekDebounceJob = CoroutineScope(Dispatchers.Main).launch {
+                            kotlinx.coroutines.delay(800)
+                            commitScrubSeek()
+                        }
+                        return@setOnKeyListener true
+                    }
+                    KeyEvent.KEYCODE_DPAD_CENTER,
+                    KeyEvent.KEYCODE_ENTER,
+                    KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                        if (isUserScrubbing && scrubTargetMs >= 0) {
+                            seekDebounceJob?.cancel()
+                            commitScrubSeek()
+                            return@setOnKeyListener true
+                        }
+                    }
+                }
+            }
+            false
+        }
+
         binding.sbPlayerProgress.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
@@ -343,6 +430,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {
+                isUserScrubbing = true
+                seekDebounceJob?.cancel()
                 osdHandler.removeCallbacks(hideOsdRunnable)
             }
 
@@ -351,20 +440,123 @@ class MainActivity : AppCompatActivity() {
                 val effectiveLen = if (totalDurationMs > 0) totalDurationMs else (playerManager?.getDuration() ?: 0L)
                 if (effectiveLen > 0) {
                     val seekTo = (progress.toDouble() / 1000.0 * effectiveLen).toLong()
+                    isUserScrubbing = false
+                    scrubTargetMs = -1L
                     seekToSafe(seekTo)
                 }
                 resetOsdTimer()
             }
         })
 
-        // Hardware decoder info
-        binding.btnPlayerDecoder.setOnClickListener {
-            Toast.makeText(this, "ExoPlayer MediaCodec Hardware Acceleration Active (60 FPS)", Toast.LENGTH_SHORT).show()
+        // Drop-up Audio Track selector
+        binding.btnPlayerAudioTrack.setOnClickListener {
+            toggleAudioTrackDropUp()
+            resetOsdTimer()
+        }
+
+        // Subtitle Toggle
+        binding.btnPlayerSubtitle.setOnClickListener {
+            val currentEnabled = playerManager?.areSubtitlesEnabled() ?: true
+            val newEnabled = !currentEnabled
+            playerManager?.setSubtitlesEnabled(newEnabled)
+            binding.btnPlayerSubtitle.text = if (newEnabled) "Subtitles: ON" else "Subtitles: OFF"
+            val msg = if (newEnabled) "Subtitles turned ON" else "Subtitles turned OFF"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             resetOsdTimer()
         }
 
         binding.btnPlayerStop.setOnClickListener {
             stopPlayback()
+        }
+    }
+
+    private fun commitScrubSeek() {
+        if (scrubTargetMs >= 0) {
+            val target = scrubTargetMs
+            scrubTargetMs = -1L
+            isUserScrubbing = false
+            seekToSafe(target)
+            resetOsdTimer()
+        }
+    }
+
+    private fun updateAudioTracksUi(tracks: List<AudioTrackInfo>) {
+        availableAudioTracks = tracks
+        if (tracks.size > 1) {
+            binding.btnPlayerAudioTrack.text = "Audio Track"
+            binding.btnPlayerAudioTrack.visibility = View.VISIBLE
+            populateAudioTrackDropUp(tracks)
+        } else {
+            binding.btnPlayerAudioTrack.visibility = View.GONE
+            binding.layoutAudioTrackDropUp.visibility = View.GONE
+        }
+    }
+
+    private fun updateSubtitlesUi(hasSubtitles: Boolean, areSubtitlesEnabled: Boolean) {
+        if (hasSubtitles) {
+            binding.btnPlayerSubtitle.text = if (areSubtitlesEnabled) "Subtitles: ON" else "Subtitles: OFF"
+            binding.btnPlayerSubtitle.visibility = View.VISIBLE
+        } else {
+            binding.btnPlayerSubtitle.visibility = View.GONE
+        }
+    }
+
+    private fun populateAudioTrackDropUp(tracks: List<AudioTrackInfo>) {
+        binding.llAudioTrackList.removeAllViews()
+        val trackViews = mutableListOf<View>()
+        for (track in tracks) {
+            val itemView = layoutInflater.inflate(R.layout.item_tv_audio_track, binding.llAudioTrackList, false)
+            itemView.id = View.generateViewId()
+            val tvCheck = itemView.findViewById<TextView>(R.id.tvAudioTrackCheck)
+            val tvTitle = itemView.findViewById<TextView>(R.id.tvAudioTrackTitle)
+
+            tvCheck.visibility = if (track.isSelected) View.VISIBLE else View.INVISIBLE
+            tvTitle.text = track.label
+            if (track.isSelected) {
+                tvTitle.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.tv_accent_cyan))
+            } else {
+                tvTitle.setTextColor(android.graphics.Color.WHITE)
+            }
+
+            itemView.setOnClickListener {
+                playerManager?.selectAudioTrack(track)
+                binding.layoutAudioTrackDropUp.visibility = View.GONE
+                binding.btnPlayerAudioTrack.requestFocus()
+                resetOsdTimer()
+                Toast.makeText(this, "Audio: ${track.label}", Toast.LENGTH_SHORT).show()
+            }
+
+            trackViews.add(itemView)
+            binding.llAudioTrackList.addView(itemView)
+        }
+
+        for ((index, itemView) in trackViews.withIndex()) {
+            if (index > 0) {
+                itemView.nextFocusUpId = trackViews[index - 1].id
+            }
+            if (index < trackViews.size - 1) {
+                itemView.nextFocusDownId = trackViews[index + 1].id
+            } else {
+                itemView.nextFocusDownId = R.id.btnPlayerAudioTrack
+            }
+        }
+    }
+
+    private fun toggleAudioTrackDropUp() {
+        val dropUp = binding.layoutAudioTrackDropUp
+        if (dropUp.visibility == View.VISIBLE) {
+            dropUp.visibility = View.GONE
+            binding.btnPlayerAudioTrack.requestFocus()
+        } else {
+            if (availableAudioTracks.size > 1) {
+                populateAudioTrackDropUp(availableAudioTracks)
+                dropUp.visibility = View.VISIBLE
+                dropUp.bringToFront()
+                val selectedIdx = availableAudioTracks.indexOfFirst { it.isSelected }.coerceAtLeast(0)
+                if (selectedIdx < binding.llAudioTrackList.childCount) {
+                    binding.llAudioTrackList.getChildAt(selectedIdx).requestFocus()
+                }
+            }
         }
     }
 
@@ -602,8 +794,6 @@ class MainActivity : AppCompatActivity() {
         }
         currentPositionMs = startPositionMs
 
-        binding.btnPlayerDecoder.text = "ExoPlayer HW"
-
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK))
         binding.layoutHome.visibility = View.GONE
         binding.layoutPlayer.visibility = View.VISIBLE
@@ -617,6 +807,11 @@ class MainActivity : AppCompatActivity() {
         val initialPos = if (startPositionMs > 0L) startPositionMs else 0L
         updatePlaybackUi(playing = true, timeMs = initialPos, lengthMs = totalDurationMs)
 
+        binding.btnPlayerAudioTrack.visibility = View.GONE
+        binding.btnPlayerSubtitle.visibility = View.GONE
+        binding.layoutAudioTrackDropUp.visibility = View.GONE
+        availableAudioTracks = emptyList()
+
         playerManager?.play(streamUrl, startPositionMs)
         showOsd()
         binding.btnPlayerPlayPause.requestFocus()
@@ -624,9 +819,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopPlayback() {
         dismissTvPreparing()
+        seekDebounceJob?.cancel()
+        isUserScrubbing = false
+        scrubTargetMs = -1L
         currentSeekOffsetMs = 0L
         osdHandler.removeCallbacks(hideOsdRunnable)
         playerManager?.stop()
+        binding.layoutAudioTrackDropUp.visibility = View.GONE
+        binding.btnPlayerAudioTrack.visibility = View.GONE
+        binding.btnPlayerSubtitle.visibility = View.GONE
+        availableAudioTracks = emptyList()
         window.setBackgroundDrawableResource(R.color.bg_tv)
         binding.layoutPlayer.visibility = View.GONE
         binding.layoutHome.visibility = View.VISIBLE
@@ -659,7 +861,7 @@ class MainActivity : AppCompatActivity() {
         val lenStr = if (effectiveLen > 0) formatDuration(effectiveLen) else "Live"
         binding.tvPlayerTime.text = "$timeStr / $lenStr"
 
-        if (effectiveLen > 0 && !binding.sbPlayerProgress.isPressed) {
+        if (effectiveLen > 0 && !isUserScrubbing && !binding.sbPlayerProgress.hasFocus() && !binding.sbPlayerProgress.isPressed) {
             val progress = ((timeMs.toDouble() / effectiveLen.toDouble()) * 1000.0).toInt().coerceIn(0, 1000)
             binding.sbPlayerProgress.progress = progress
         }
@@ -667,11 +869,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun showOsd() {
         binding.layoutOsd.visibility = View.VISIBLE
+        binding.layoutOsd.bringToFront()
+        if (binding.layoutAudioTrackDropUp.visibility == View.VISIBLE) {
+            binding.layoutAudioTrackDropUp.bringToFront()
+        }
         resetOsdTimer()
     }
 
     private fun hideOsd() {
         if (isPlaying && binding.layoutPlayer.visibility == View.VISIBLE) {
+            binding.layoutAudioTrackDropUp.visibility = View.GONE
             binding.layoutOsd.visibility = View.GONE
         }
     }
@@ -683,6 +890,24 @@ class MainActivity : AppCompatActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (binding.layoutPlayer.visibility == View.VISIBLE && event.action == KeyEvent.ACTION_DOWN) {
+            // If drop-up is open and user presses BACK, close the drop-up first
+            if (binding.layoutAudioTrackDropUp.visibility == View.VISIBLE) {
+                if (event.keyCode in listOf(KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE)) {
+                    binding.layoutAudioTrackDropUp.visibility = View.GONE
+                    binding.btnPlayerAudioTrack.requestFocus()
+                    return true
+                }
+            }
+
+            // Up arrow from Audio Track button navigates into the open drop-up menu
+            if (binding.layoutAudioTrackDropUp.visibility == View.VISIBLE && binding.btnPlayerAudioTrack.hasFocus() && event.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                val childCount = binding.llAudioTrackList.childCount
+                if (childCount > 0) {
+                    binding.llAudioTrackList.getChildAt(childCount - 1).requestFocus()
+                    return true
+                }
+            }
+
             if (binding.layoutOsd.visibility != View.VISIBLE) {
                 // Any key wakes the OSD controls and shows progress
                 showOsd()
@@ -809,6 +1034,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         dismissTvPreparing()
+        seekDebounceJob?.cancel()
         healthCheckJob?.cancel()
         discoveryManager?.stop()
         qrDialog?.dismiss()

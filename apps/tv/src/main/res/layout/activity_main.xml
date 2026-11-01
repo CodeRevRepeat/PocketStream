@@ -250,7 +250,7 @@
                 android:id="@+id/tvTvPreparingCountdown"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Starting stream in 30s..."
+                android:text="Starting stream in 15s..."
                 android:textColor="@color/tv_text_primary"
                 android:textSize="15sp"
                 android:textStyle="bold"
@@ -261,7 +261,7 @@
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
                 android:layout_height="8dp"
-                android:max="30"
+                android:max="15"
                 android:progress="0"
                 android:progressTint="@color/tv_accent_cyan"
                 android:progressBackgroundTint="#3338BDF8"
@@ -311,6 +311,7 @@
                 android:max="1000"
                 android:progress="0"
                 android:focusable="true"
+                android:nextFocusDown="@+id/btnPlayerPlayPause"
                 android:thumbTint="@color/tv_accent_cyan_glow"
                 android:progressTint="@color/tv_accent_cyan"
                 android:progressBackgroundTint="#4094A3B8"
@@ -346,7 +347,8 @@
                     android:background="@drawable/bg_tv_glass_button_selector"
                     android:stateListAnimator="@animator/tv_focus_scale"
                     android:focusable="true"
-                    android:text="|&lt;&lt; Restart"
+                    android:nextFocusUp="@+id/sbPlayerProgress"
+                    android:text="↻ Restart"
                     android:textColor="@color/color_tv_glass_button_text"
                     android:textSize="12sp"
                     android:fontFamily="sans-serif-medium"
@@ -361,6 +363,7 @@
                     android:background="@drawable/bg_tv_glass_button_selector"
                     android:stateListAnimator="@animator/tv_focus_scale"
                     android:focusable="true"
+                    android:nextFocusUp="@+id/sbPlayerProgress"
                     android:text="-10s"
                     android:textColor="@color/color_tv_glass_button_text"
                     android:textSize="12sp"
@@ -374,6 +377,7 @@
                     android:background="@drawable/bg_tv_glass_button_selector"
                     android:stateListAnimator="@animator/tv_focus_scale"
                     android:focusable="true"
+                    android:nextFocusUp="@+id/sbPlayerProgress"
                     android:text="Pause"
                     android:textColor="@color/color_tv_glass_button_text"
                     android:textSize="12sp"
@@ -387,26 +391,47 @@
                     android:background="@drawable/bg_tv_glass_button_selector"
                     android:stateListAnimator="@animator/tv_focus_scale"
                     android:focusable="true"
+                    android:nextFocusUp="@+id/sbPlayerProgress"
                     android:text="+10s"
                     android:textColor="@color/color_tv_glass_button_text"
                     android:textSize="12sp"
                     android:fontFamily="sans-serif-medium" />
 
-                <!-- Decoder Mode Toggle: HW vs SW -->
+                <!-- Drop-Up Audio Track Selector Button -->
                 <Button
-                    android:id="@+id/btnPlayerDecoder"
+                    android:id="@+id/btnPlayerAudioTrack"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
-                    android:layout_marginStart="14dp"
+                    android:layout_marginStart="10dp"
                     android:background="@drawable/bg_tv_glass_button_selector"
                     android:stateListAnimator="@animator/tv_focus_scale"
                     android:focusable="true"
-                    android:text="Decoder: HW"
-                    android:textColor="@color/tv_accent_cyan_glow"
-                    android:textSize="11sp"
+                    android:nextFocusUp="@+id/sbPlayerProgress"
+                    android:text="Audio Track"
+                    android:textColor="@color/color_tv_glass_button_text"
+                    android:textSize="12sp"
                     android:fontFamily="sans-serif-medium"
-                    android:paddingHorizontal="12dp"
-                    android:textAllCaps="false" />
+                    android:paddingHorizontal="14dp"
+                    android:textAllCaps="false"
+                    android:visibility="gone" />
+
+                <!-- Subtitle Toggle Button (Visible only when video has subtitles) -->
+                <Button
+                    android:id="@+id/btnPlayerSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_tv_glass_button_selector"
+                    android:stateListAnimator="@animator/tv_focus_scale"
+                    android:focusable="true"
+                    android:nextFocusUp="@+id/sbPlayerProgress"
+                    android:text="Subtitles: ON"
+                    android:textColor="@color/color_tv_glass_button_text"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingHorizontal="14dp"
+                    android:textAllCaps="false"
+                    android:visibility="gone" />
 
                 <Button
                     android:id="@+id/btnPlayerStop"
@@ -416,6 +441,7 @@
                     android:background="@drawable/bg_tv_glass_button_selector"
                     android:stateListAnimator="@animator/tv_focus_scale"
                     android:focusable="true"
+                    android:nextFocusUp="@+id/sbPlayerProgress"
                     android:text="✕ Exit"
                     android:textColor="@color/color_tv_glass_button_text"
                     android:textSize="12sp"
@@ -423,6 +449,43 @@
 
             </LinearLayout>
 
+        </LinearLayout>
+
+        <!-- Drop-Up Audio Track Selector Panel (Floating above OSD bar) -->
+        <LinearLayout
+            android:id="@+id/layoutAudioTrackDropUp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="96dp"
+            android:layout_marginBottom="160dp"
+            android:background="@drawable/bg_tv_glass_dialog"
+            android:elevation="16dp"
+            android:orientation="vertical"
+            android:descendantFocusability="afterDescendants"
+            android:paddingVertical="12dp"
+            android:paddingHorizontal="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SELECT AUDIO TRACK"
+                android:textColor="@color/tv_accent_cyan"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/llAudioTrackList"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:descendantFocusability="afterDescendants"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="vertical" />
         </LinearLayout>
 
     </FrameLayout>

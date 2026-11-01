@@ -41,7 +41,7 @@ public struct PreparingStreamView: View {
                             .fill(Color(hex: "#38BDF8").opacity(0.2))
                             .frame(height: 8)
 
-                        let width = geo.size.width * CGFloat(30 - secondsRemaining) / 30.0
+                        let width = geo.size.width * CGFloat(15 - secondsRemaining) / 15.0
                         RoundedRectangle(cornerRadius: 4)
                             .fill(Color(hex: "#38BDF8"))
                             .frame(width: max(0, min(width, geo.size.width)), height: 8)

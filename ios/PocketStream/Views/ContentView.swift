@@ -19,10 +19,10 @@ public struct ContentView: View {
     @State private var incompatibleMedia: (LocalMedia, [String])?
     @State private var showActionOptionsForMedia: LocalMedia?
 
-    // 30-second preparing countdown state
+    // 15-second preparing countdown state
     @State private var isPreparing = false
     @State private var preparingTitle = "Preparing Video for TV"
-    @State private var preparingCountdownSeconds = 30
+    @State private var preparingCountdownSeconds = 15
     @State private var preparingTranscodePercent = 0
     @State private var preparingTimer: Timer?
 
@@ -89,7 +89,7 @@ public struct ContentView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            // Preparing 30s Countdown Overlay
+            // Preparing 15s Countdown Overlay
             if isPreparing {
                 PreparingStreamView(
                     title: preparingTitle,
@@ -616,7 +616,7 @@ public struct ContentView: View {
         }
 
         isPreparing = true
-        preparingCountdownSeconds = 30
+        preparingCountdownSeconds = 15
         preparingTranscodePercent = 0
 
         TranscoderManager.shared.startLiveTranscode(

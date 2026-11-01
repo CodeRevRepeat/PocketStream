@@ -149,9 +149,10 @@ object TranscoderManager {
             .setFragmentDurationUs(1_000_000)
             .build()
 
-        // 4.5 Mbps target bitrate: pristine 1080p quality, Level 4.2 for 100% Android TV hardware playback
+        // 14-20 Mbps VBR High Profile with BT.709 Color Metadata for pristine dark scenes and zero banding
         val videoEncoderSettings = VideoEncoderSettings.Builder()
-            .setBitrate(4_500_000)
+            .setBitrate(14_000_000)
+            .setBitrateMode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
             .setEncodingProfileLevel(
                 MediaCodecInfo.CodecProfileLevel.AVCProfileHigh,
                 MediaCodecInfo.CodecProfileLevel.AVCLevel42
@@ -230,7 +231,14 @@ object TranscoderManager {
             } else {
                 Media3Item.fromUri(media.uri)
             }
-            transformer.start(inputMediaItem, outputFile.absolutePath)
+
+            val editedMediaItem = androidx.media3.transformer.EditedMediaItem.Builder(inputMediaItem).build()
+            val sequence = androidx.media3.transformer.EditedMediaItemSequence(editedMediaItem)
+            val composition = Composition.Builder(sequence)
+                .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_MEDIACODEC)
+                .build()
+
+            transformer.start(composition, outputFile.absolutePath)
 
             var readyDispatched = false
             val startTimeMs = System.currentTimeMillis()

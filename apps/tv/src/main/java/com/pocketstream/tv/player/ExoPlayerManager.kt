@@ -5,14 +5,29 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackGroup
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.util.EventLogger
 import androidx.media3.ui.PlayerView
+import java.util.Locale
+
+data class AudioTrackInfo(
+    val groupIndex: Int,
+    val trackIndex: Int,
+    val format: Format,
+    val label: String,
+    val isSelected: Boolean,
+    val mediaTrackGroup: TrackGroup
+)
 
 class ExoPlayerManager(
     private val context: Context,
@@ -23,6 +38,9 @@ class ExoPlayerManager(
     companion object {
         private const val TAG = "ExoPlayerManager"
     }
+
+    var onAudioTracksChanged: ((List<AudioTrackInfo>) -> Unit)? = null
+    var onSubtitlesChanged: ((hasSubtitles: Boolean, areSubtitlesEnabled: Boolean) -> Unit)? = null
 
     private var exoPlayer: ExoPlayer? = null
     private var currentUrl: String? = null
@@ -96,6 +114,17 @@ class ExoPlayerManager(
                 }
             }
 
+            override fun onTracksChanged(tracks: Tracks) {
+                val audioList = getAudioTracks()
+                Log.i(TAG, "ExoPlayer onTracksChanged: ${audioList.size} audio tracks found")
+                onAudioTracksChanged?.invoke(audioList)
+
+                val hasSubs = hasSubtitleTracks()
+                val areSubsEnabled = areSubtitlesEnabled()
+                Log.i(TAG, "ExoPlayer onTracksChanged: subtitles available=$hasSubs, enabled=$areSubsEnabled")
+                onSubtitlesChanged?.invoke(hasSubs, areSubsEnabled)
+            }
+
             override fun onPlayerError(error: PlaybackException) {
                 Log.e(TAG, "ExoPlayer error: [${error.errorCode}] ${error.message}", error)
                 onError(error.message ?: "Playback error (${error.errorCode})")
@@ -159,6 +188,103 @@ class ExoPlayerManager(
             return
         }
         player.seekTo(safePos)
+    }
+
+    fun getAudioTracks(): List<AudioTrackInfo> {
+        val player = exoPlayer ?: return emptyList()
+        val tracks = player.currentTracks
+        val result = mutableListOf<AudioTrackInfo>()
+        var groupCounter = 0
+        for (group in tracks.groups) {
+            if (group.type == C.TRACK_TYPE_AUDIO) {
+                val mediaTrackGroup = group.mediaTrackGroup
+                for (i in 0 until group.length) {
+                    val format = group.getTrackFormat(i)
+                    val isSelected = group.isTrackSelected(i)
+
+                    val lang = format.language
+                    val langDisplay = if (!lang.isNullOrEmpty()) {
+                        try {
+                            Locale(lang).getDisplayLanguage(Locale.ENGLISH).ifEmpty { lang }
+                        } catch (_: Exception) {
+                            lang
+                        }
+                    } else null
+
+                    val channelStr = when (format.channelCount) {
+                        1 -> "Mono"
+                        2 -> "Stereo"
+                        6 -> "5.1"
+                        8 -> "7.1"
+                        else -> if (format.channelCount > 0) "${format.channelCount}ch" else ""
+                    }
+
+                    val mimeStr = format.sampleMimeType?.substringAfterLast("/")?.uppercase() ?: ""
+
+                    val label = buildString {
+                        if (!format.label.isNullOrEmpty()) {
+                            append(format.label)
+                        } else if (!langDisplay.isNullOrEmpty()) {
+                            append(langDisplay)
+                        } else {
+                            append("Audio Track ${result.size + 1}")
+                        }
+                        val details = listOf(channelStr, mimeStr).filter { it.isNotEmpty() }
+                        if (details.isNotEmpty()) {
+                            append(" (${details.joinToString(", ")})")
+                        }
+                    }
+
+                    result.add(
+                        AudioTrackInfo(
+                            groupIndex = groupCounter,
+                            trackIndex = i,
+                            format = format,
+                            label = label,
+                            isSelected = isSelected,
+                            mediaTrackGroup = mediaTrackGroup
+                        )
+                    )
+                }
+                groupCounter++
+            }
+        }
+        return result
+    }
+
+    fun selectAudioTrack(track: AudioTrackInfo) {
+        val player = exoPlayer ?: return
+        Log.i(TAG, "selectAudioTrack: ${track.label} (groupIndex: ${track.groupIndex}, trackIndex: ${track.trackIndex})")
+        val override = TrackSelectionOverride(track.mediaTrackGroup, track.trackIndex)
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+            .addOverride(override)
+            .build()
+    }
+
+    fun hasSubtitleTracks(): Boolean {
+        val player = exoPlayer ?: return false
+        for (group in player.currentTracks.groups) {
+            if (group.type == C.TRACK_TYPE_TEXT && group.length > 0) {
+                return true
+            }
+        }
+        return false
+    }
+
+    fun areSubtitlesEnabled(): Boolean {
+        val player = exoPlayer ?: return false
+        return !player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
+    }
+
+    fun setSubtitlesEnabled(enabled: Boolean) {
+        val player = exoPlayer ?: return
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !enabled)
+            .build()
     }
 
     fun isSeekable(): Boolean = exoPlayer?.isCurrentMediaItemSeekable == true

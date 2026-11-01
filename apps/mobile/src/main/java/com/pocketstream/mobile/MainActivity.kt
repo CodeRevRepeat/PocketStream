@@ -805,10 +805,10 @@ class MainActivity : AppCompatActivity() {
             }
         )
 
-        // 30 seconds buffer period (counts down 30s -> 0s)
+        // 15 seconds buffer period (counts down 15s -> 0s)
         preparingCountdownJob?.cancel()
         preparingCountdownJob = lifecycleScope.launch(Dispatchers.Main) {
-            val totalSeconds = 30
+            val totalSeconds = 15
             for (secRemaining in totalSeconds downTo 1) {
                 tvCountdown.text = "Starting stream in ${secRemaining}s..."
                 pbCountdown.progress = totalSeconds - secRemaining
@@ -816,7 +816,7 @@ class MainActivity : AppCompatActivity() {
                 delay(1000)
             }
 
-            // 30 seconds buffer elapsed! Hardware encoder has buffered ~4-5 minutes of video!
+            // 15 seconds buffer elapsed! Hardware encoder has buffered sufficient video!
             if (!isStreamDispatched && !isFinishing && !isDestroyed) {
                 isStreamDispatched = true
                 dialog.dismiss()
