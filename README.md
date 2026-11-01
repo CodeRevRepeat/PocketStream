@@ -24,37 +24,44 @@ No cloud, no third-party media servers (Plex/Emby/Jellyfin), no transcoding serv
 
 ## Download Pre-Built Release APKs
 
-Grab the latest production **Release APKs** from the [GitHub Releases](https://github.com/CodeRevRepeat/PocketStream/releases) tab, or from the build output directory:
+Grab the latest production **Release APKs** directly from the [`release/`](release/) folder in this repository:
 
-| App | Target Platform | Min OS | Build Artifact |
+| App | Target Platform | Min OS | Release Artifact |
 | :--- | :--- | :--- | :--- |
-| **PocketStream TV** | Android TV, Google TV, Fire TV | Android 8.0+ (API 26+) / Fire OS 7+ | `apps/tv/build/outputs/apk/release/tv-release.apk` |
-| **PocketStream Mobile** | Android Phones & Tablets | Android 8.0+ (Optimized for 14+) | `apps/mobile/build/outputs/apk/release/mobile-release.apk` |
+| **PocketStream TV** | Android TV, Google TV, Fire TV | Android 8.0+ (API 26+) / Fire OS 7+ | [`release/tv-release.apk`](release/tv-release.apk) |
+| **PocketStream Mobile** | Android Phones & Tablets | Android 8.0+ (Optimized for 14+) | [`release/mobile-release.apk`](release/mobile-release.apk) |
 
 ---
 
 ## Installation & Sideloading
 
 ### 1. Android TV & Amazon Fire TV Stick
-You can install `tv-release.apk` onto your TV or Fire TV Stick using either method below:
+Install `tv-release.apk` onto your TV or Fire TV Stick using either method below:
 
 #### Method A: Direct ADB Sideload (Quickest)
 1. Enable **Developer Options** and **ADB Debugging** on your TV or Fire TV:
    * **Fire TV:** *Settings → My Fire TV → About* (click device name 7 times) → *Developer Options → Turn ADB Debugging ON*.
    * **Android TV / Google TV:** *Settings → Device Preferences / System → About* (click Build Number 7 times) → *Developer Options → Turn USB/Network Debugging ON*.
-2. Connect and install from your terminal:
+2. Connect and install directly using the release APK path:
    ```bash
    adb connect <TV_IP_ADDRESS>:5555
-   adb install -r apps/tv/build/outputs/apk/release/tv-release.apk
+   adb install -r release/tv-release.apk
    ```
 
 #### Method B: Using the "Downloader" App (Fire TV & Android TV)
 1. Install the free **Downloader** app from the Amazon Appstore or Google Play Store.
 2. In TV settings, allow **Install Unknown Apps** for Downloader.
-3. Enter the direct download link from the [GitHub Releases](https://github.com/CodeRevRepeat/PocketStream/releases) page into Downloader to install.
+3. Enter the direct download link from the [GitHub repository](https://github.com/CodeRevRepeat/PocketStream/raw/main/release/tv-release.apk) into Downloader to install.
 
 ### 2. Android Mobile Phone
-1. Transfer or download `mobile-release.apk` to your phone.
+
+#### Method A: Direct ADB Install
+```bash
+adb install -r release/mobile-release.apk
+```
+
+#### Method B: Manual Install
+1. Transfer or download [`release/mobile-release.apk`](release/mobile-release.apk) to your phone.
 2. Open the file in your preferred file manager.
 3. When prompted, allow *Install from unknown sources* and tap **Install**.
 
@@ -147,9 +154,9 @@ cd PocketStream
 ./gradlew :apps:mobile:bundleRelease
 ```
 
-Generated Release APK paths:
-* **TV Release APK:** `apps/tv/build/outputs/apk/release/tv-release.apk`
-* **Mobile Release APK:** `apps/mobile/build/outputs/apk/release/mobile-release.apk`
+Release APK output paths:
+* **TV Release APK:** [`release/tv-release.apk`](release/tv-release.apk)
+* **Mobile Release APK:** [`release/mobile-release.apk`](release/mobile-release.apk)
 
 ---
 
