@@ -2,8 +2,8 @@
 *.aab
 *.ap_
 release/*
-!release/*.apk
-!release/*.ipa
+!release/mobile-release.apk
+!release/tv-release.apk
 
 # Files for the ART/Dalvik VM
 *.dex
