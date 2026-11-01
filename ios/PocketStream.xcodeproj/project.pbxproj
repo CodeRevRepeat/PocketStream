@@ -1,0 +1,376 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1A0000012CE0000100000001 /* PocketStreamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000112CE0000100000001 /* PocketStreamApp.swift */; };
+		1A0000022CE0000100000001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000122CE0000100000001 /* ContentView.swift */; };
+		1A0000032CE0000100000001 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000132CE0000100000001 /* QRScannerView.swift */; };
+		1A0000042CE0000100000001 /* PreparingStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000142CE0000100000001 /* PreparingStreamView.swift */; };
+		1A0000052CE0000100000001 /* IncompatibleFormatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000152CE0000100000001 /* IncompatibleFormatView.swift */; };
+		1A0000062CE0000100000001 /* DiscoveryMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000162CE0000100000001 /* DiscoveryMessage.swift */; };
+		1A0000072CE0000100000001 /* MediaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000172CE0000100000001 /* MediaItem.swift */; };
+		1A0000082CE0000100000001 /* PlaybackControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000182CE0000100000001 /* PlaybackControl.swift */; };
+		1A0000092CE0000100000001 /* ServerStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000192CE0000100000001 /* ServerStatus.swift */; };
+		1A00000A2CE0000100000001 /* TvCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00001A2CE0000100000001 /* TvCapabilities.swift */; };
+		1A00000B2CE0000100000001 /* MediaRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00001B2CE0000100000001 /* MediaRepository.swift */; };
+		1A00000C2CE0000100000001 /* NetworkUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00001C2CE0000100000001 /* NetworkUtils.swift */; };
+		1A00000D2CE0000100000001 /* PocketHttpServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00001D2CE0000100000001 /* PocketHttpServer.swift */; };
+		1A00000E2CE0000100000001 /* TranscoderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00001E2CE0000100000001 /* TranscoderManager.swift */; };
+		1A00000F2CE0000100000001 /* MobileDiscoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00001F2CE0000100000001 /* MobileDiscoveryManager.swift */; };
+		1A0000102CE0000100000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000202CE0000100000001 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1A0000112CE0000100000001 /* PocketStreamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketStreamApp.swift; sourceTree = "<group>"; };
+		1A0000122CE0000100000001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		1A0000132CE0000100000001 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
+		1A0000142CE0000100000001 /* PreparingStreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparingStreamView.swift; sourceTree = "<group>"; };
+		1A0000152CE0000100000001 /* IncompatibleFormatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncompatibleFormatView.swift; sourceTree = "<group>"; };
+		1A0000162CE0000100000001 /* DiscoveryMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryMessage.swift; sourceTree = "<group>"; };
+		1A0000172CE0000100000001 /* MediaItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItem.swift; sourceTree = "<group>"; };
+		1A0000182CE0000100000001 /* PlaybackControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackControl.swift; sourceTree = "<group>"; };
+		1A0000192CE0000100000001 /* ServerStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerStatus.swift; sourceTree = "<group>"; };
+		1A00001A2CE0000100000001 /* TvCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TvCapabilities.swift; sourceTree = "<group>"; };
+		1A00001B2CE0000100000001 /* MediaRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaRepository.swift; sourceTree = "<group>"; };
+		1A00001C2CE0000100000001 /* NetworkUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkUtils.swift; sourceTree = "<group>"; };
+		1A00001D2CE0000100000001 /* PocketStream.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PocketStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A00001E2CE0000100000001 /* TranscoderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscoderManager.swift; sourceTree = "<group>"; };
+		1A00001F2CE0000100000001 /* MobileDiscoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDiscoveryManager.swift; sourceTree = "<group>"; };
+		1A0000202CE0000100000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1A0000212CE0000100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1A0000222CE0000100000001 /* PocketStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketHttpServer.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1A0000302CE0000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1A0000402CE0000100000001 = {
+			isa = PBXGroup;
+			children = (
+				1A0000412CE0000100000001 /* PocketStream */,
+				1A0000422CE0000100000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		1A0000412CE0000100000001 /* PocketStream */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000432CE0000100000001 /* App */,
+				1A0000442CE0000100000001 /* Models */,
+				1A0000452CE0000100000001 /* Storage */,
+				1A0000462CE0000100000001 /* Server */,
+				1A0000472CE0000100000001 /* Transcoder */,
+				1A0000482CE0000100000001 /* Discovery */,
+				1A0000492CE0000100000001 /* Views */,
+				1A00004A2CE0000100000001 /* Resources */,
+				1A0000212CE0000100000001 /* Info.plist */,
+			);
+			path = PocketStream;
+			sourceTree = "<group>";
+		};
+		1A0000422CE0000100000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1A00001D2CE0000100000001 /* PocketStream.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1A0000432CE0000100000001 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000112CE0000100000001 /* PocketStreamApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		1A0000442CE0000100000001 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000162CE0000100000001 /* DiscoveryMessage.swift */,
+				1A0000172CE0000100000001 /* MediaItem.swift */,
+				1A0000182CE0000100000001 /* PlaybackControl.swift */,
+				1A0000192CE0000100000001 /* ServerStatus.swift */,
+				1A00001A2CE0000100000001 /* TvCapabilities.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		1A0000452CE0000100000001 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				1A00001B2CE0000100000001 /* MediaRepository.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		1A0000462CE0000100000001 /* Server */ = {
+			isa = PBXGroup;
+			children = (
+				1A00001C2CE0000100000001 /* NetworkUtils.swift */,
+				1A00001D2CE0000100000001 /* PocketHttpServer.swift */,
+			);
+			path = Server;
+			sourceTree = "<group>";
+		};
+		1A0000472CE0000100000001 /* Transcoder */ = {
+			isa = PBXGroup;
+			children = (
+				1A00001E2CE0000100000001 /* TranscoderManager.swift */,
+			);
+			path = Transcoder;
+			sourceTree = "<group>";
+		};
+		1A0000482CE0000100000001 /* Discovery */ = {
+			isa = PBXGroup;
+			children = (
+				1A00001F2CE0000100000001 /* MobileDiscoveryManager.swift */,
+			);
+			path = Discovery;
+			sourceTree = "<group>";
+		};
+		1A0000492CE0000100000001 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000122CE0000100000001 /* ContentView.swift */,
+				1A0000132CE0000100000001 /* QRScannerView.swift */,
+				1A0000142CE0000100000001 /* PreparingStreamView.swift */,
+				1A0000152CE0000100000001 /* IncompatibleFormatView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		1A00004A2CE0000100000001 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000202CE0000100000001 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1A0000502CE0000100000001 /* PocketStream */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A0000602CE0000100000001 /* Build configuration list for PBXNativeTarget "PocketStream" */;
+			buildPhases = (
+				1A0000512CE0000100000001 /* Sources */,
+				1A0000302CE0000100000001 /* Frameworks */,
+				1A0000522CE0000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PocketStream;
+			productName = PocketStream;
+			productReference = 1A00001D2CE0000100000001 /* PocketStream.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1A0000702CE0000100000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					1A0000502CE0000100000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 1A0000712CE0000100000001 /* Build configuration list for PBXProject "PocketStream" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 1A0000402CE0000100000001;
+			productRefGroup = 1A0000422CE0000100000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1A0000502CE0000100000001 /* PocketStream */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1A0000522CE0000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1A0000102CE0000100000001 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1A0000512CE0000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1A0000012CE0000100000001 /* PocketStreamApp.swift in Sources */,
+				1A0000022CE0000100000001 /* ContentView.swift in Sources */,
+				1A0000032CE0000100000001 /* QRScannerView.swift in Sources */,
+				1A0000042CE0000100000001 /* PreparingStreamView.swift in Sources */,
+				1A0000052CE0000100000001 /* IncompatibleFormatView.swift in Sources */,
+				1A0000062CE0000100000001 /* DiscoveryMessage.swift in Sources */,
+				1A0000072CE0000100000001 /* MediaItem.swift in Sources */,
+				1A0000082CE0000100000001 /* PlaybackControl.swift in Sources */,
+				1A0000092CE0000100000001 /* ServerStatus.swift in Sources */,
+				1A00000A2CE0000100000001 /* TvCapabilities.swift in Sources */,
+				1A00000B2CE0000100000001 /* MediaRepository.swift in Sources */,
+				1A00000C2CE0000100000001 /* NetworkUtils.swift in Sources */,
+				1A00000D2CE0000100000001 /* PocketHttpServer.swift in Sources */,
+				1A00000E2CE0000100000001 /* TranscoderManager.swift in Sources */,
+				1A00000F2CE0000100000001 /* MobileDiscoveryManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1A0000612CE0000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PocketStream/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pocketstream.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1A0000622CE0000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PocketStream/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pocketstream.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		1A0000722CE0000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		1A0000732CE0000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1A0000602CE0000100000001 /* Build configuration list for PBXNativeTarget "PocketStream" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A0000612CE0000100000001 /* Debug */,
+				1A0000622CE0000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1A0000712CE0000100000001 /* Build configuration list for PBXProject "PocketStream" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A0000722CE0000100000001 /* Debug */,
+				1A0000732CE0000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1A0000702CE0000100000001 /* Project object */;
+}
