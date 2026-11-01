@@ -49,9 +49,39 @@ Install `tv-release.apk` onto your TV or Fire TV Stick using either method below
    ```
 
 #### Method B: Using the "Downloader" App (Fire TV & Android TV)
-1. Install the free **Downloader** app from the Amazon Appstore or Google Play Store.
-2. In TV settings, allow **Install Unknown Apps** for Downloader.
-3. Enter the direct download link from the [GitHub repository](https://github.com/CodeRevRepeat/PocketStream/raw/main/release/tv-release.apk) into Downloader to install.
+1. Install the free **Downloader** app by AFTVnews from the Amazon Appstore or Google Play Store.
+2. Enable **Install Unknown Apps** permission for Downloader on your device:
+
+   **For Android TV / Google TV:**
+   1. Open **Settings**.
+   2. Go to **Apps**.
+   3. Select **Special app access** (if available).
+   4. Select **Install unknown apps**.
+   5. Find **Downloader**.
+   6. Enable **Allow from this source**.
+
+   *(Depending on your TV manufacturer, the menu path might instead be: **Settings → Security & Restrictions → Unknown Sources → Downloader → ON**).*
+
+   *If Developer Options are required:*
+   1. Go to **Settings → System → About** (or *Device Preferences → About*).
+   2. Find **Android TV OS Build** (or *Build*).
+   3. Press the **OK** button on your remote 7 times.
+   4. Developer Options will become available.
+   5. Return to Settings and configure the installation permission.
+
+   **For Amazon Fire TV:**
+   1. Open **Settings**.
+   2. Select **My Fire TV** (or **Device & Software**).
+   3. Select **Developer Options**.
+      *(If Developer Options is not visible, go to **About**, highlight your Fire TV name, and click the remote button 7 times).*
+   4. Select **Install Unknown Apps**.
+   5. Find **Downloader** and switch it **ON**.
+
+3. Launch **Downloader**, enter the direct download link into the URL bar, and click **Go**:
+   ```text
+   https://github.com/CodeRevRepeat/PocketStream/raw/main/release/tv-release.apk
+   ```
+4. Once the download completes, tap **Install** when prompted.
 
 ### 2. Android Mobile Phone
 
