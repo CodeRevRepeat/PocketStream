@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog_compatibility"
+    android:padding="22dp">
+
+    <!-- Header Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <ImageView
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@drawable/ic_compat_tv"
+            android:layout_marginEnd="12dp"
+            android:contentDescription="TV" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Playback Compatibility"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:fontFamily="sans-serif-medium"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Filename Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="14dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_compat_video"
+            android:layout_marginEnd="12dp"
+            android:contentDescription="Video" />
+
+        <TextView
+            android:id="@+id/tvCompatFilename"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Video Title"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="2"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <!-- Warning Banner -->
+    <LinearLayout
+        android:id="@+id/llCompatWarningBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_dialog_warning_banner"
+        android:padding="12dp"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="14dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_compat_warning"
+            android:layout_marginEnd="12dp"
+            android:layout_gravity="center_vertical"
+            android:contentDescription="Warning" />
+
+        <TextView
+            android:id="@+id/tvCompatWarning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="This video is not supported directly by your TCL Android TV."
+            android:textColor="#FDE68A"
+            android:textSize="13sp"
+            android:fontFamily="sans-serif-medium"
+            android:lineSpacingExtra="2dp" />
+    </LinearLayout>
+
+    <!-- Bullets Section -->
+    <LinearLayout
+        android:id="@+id/llCompatBulletHdr"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="top"
+        android:layout_marginBottom="12dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_compat_hdr"
+            android:layout_marginEnd="12dp"
+            android:layout_marginTop="1dp"
+            android:contentDescription="HDR" />
+
+        <TextView
+            android:id="@+id/tvCompatHdr"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="10-bit color / HDR detected (TV hardware decoder only supports 8-bit)"
+            android:textColor="#F1F5F9"
+            android:textSize="13sp"
+            android:fontFamily="sans-serif"
+            android:lineSpacingExtra="2dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/llCompatBulletChip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="top"
+        android:layout_marginBottom="20dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_compat_chip"
+            android:layout_marginEnd="12dp"
+            android:layout_marginTop="1dp"
+            android:contentDescription="Hardware" />
+
+        <TextView
+            android:id="@+id/tvCompatChip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Your phone can real-time hardware-encode this video using its Snapdragon processor for smooth, stutter-free playback on your TV."
+            android:textColor="#CBD5E1"
+            android:textSize="13sp"
+            android:fontFamily="sans-serif"
+            android:lineSpacingExtra="2dp" />
+    </LinearLayout>
+
+    <!-- Buttons -->
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btnCompatPrimary"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:background="@drawable/bg_btn_lime_pill"
+        android:text="▶   Direct Play (Recommended)"
+        android:textColor="#000000"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textAllCaps="false"
+        android:stateListAnimator="@null"
+        android:elevation="0dp"
+        android:layout_marginBottom="10dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnCompatSecondary"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_btn_dark_outline_pill"
+            android:text="▷   Encode &amp; Stream"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textAllCaps="false"
+            android:stateListAnimator="@null"
+            android:elevation="0dp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnCompatCancel"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_btn_dark_outline_pill"
+            android:text="Cancel"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textAllCaps="false"
+            android:stateListAnimator="@null"
+            android:elevation="0dp" />
+    </LinearLayout>
+
+</LinearLayout>

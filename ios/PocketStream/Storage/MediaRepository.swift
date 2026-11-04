@@ -130,6 +130,46 @@ public class MediaRepository: ObservableObject {
         return mediaMap[id]
     }
 
+    public func getThumbnailFile(id: String) -> URL {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("thumbnails")
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir.appendingPathComponent("thumb_\(id).jpg")
+    }
+
+    public func generateThumbnail(for media: LocalMedia) -> URL? {
+        let thumbUrl = getThumbnailFile(id: media.id)
+        if FileManager.default.fileExists(atPath: thumbUrl.path) {
+            return thumbUrl
+        }
+        let asset = AVURLAsset(url: media.url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 480, height: 270)
+
+        let totalSeconds = CMTimeGetSeconds(asset.duration)
+        let targetSec: Double
+        if totalSeconds > 6.0 {
+            targetSec = max(3.0, totalSeconds * 0.10)
+        } else if totalSeconds > 0 {
+            targetSec = totalSeconds / 2.0
+        } else {
+            targetSec = 0
+        }
+        let time = CMTime(seconds: targetSec, preferredTimescale: 600)
+        if let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) {
+            #if canImport(UIKit)
+            let uiImage = UIImage(cgImage: cgImage)
+            if let data = uiImage.jpegData(compressionQuality: 0.8) {
+                try? data.write(to: thumbUrl)
+                return thumbUrl
+            }
+            #endif
+        }
+        return nil
+    }
+
     public func getAllMediaItems() -> [MediaItem] {
         return mediaList.map { media in
             MediaItem(
@@ -142,7 +182,8 @@ public class MediaRepository: ObservableObject {
                 height: media.height,
                 videoCodec: media.videoCodec,
                 audioCodec: media.audioCodec,
-                streamPath: "/stream/\(media.id)"
+                streamPath: "/stream/\(media.id)",
+                thumbnailPath: "/api/v1/thumbnail/\(media.id)"
             )
         }
     }
@@ -170,9 +211,7 @@ public class MediaRepository: ObservableObject {
         var width = 0
         var height = 0
         var videoCodec = ""
-        var is10Bit = title.localizedCaseInsensitiveContains("10bit") ||
-                      title.localizedCaseInsensitiveContains("10-bit") ||
-                      title.localizedCaseInsensitiveContains("hdr")
+        var is10Bit = false
 
         if let track = asset.tracks(withMediaType: .video).first {
             let size = track.naturalSize.applying(track.preferredTransform)
@@ -200,7 +239,7 @@ public class MediaRepository: ObservableObject {
             }
         }
 
-        return LocalMedia(
+        let localMedia = LocalMedia(
             id: id,
             url: url,
             title: title,
@@ -213,6 +252,8 @@ public class MediaRepository: ObservableObject {
             audioCodec: "aac",
             is10Bit: is10Bit
         )
+        let _ = generateThumbnail(for: localMedia)
+        return localMedia
     }
 
     private func fourCCToString(_ code: FourCharCode) -> String {

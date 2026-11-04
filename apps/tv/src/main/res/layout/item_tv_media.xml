@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/cardContainer"
     android:layout_width="240dp"
-    android:layout_height="146dp"
+    android:layout_height="186dp"
     android:layout_marginEnd="18dp"
     android:layout_marginVertical="8dp"
     android:focusable="true"
@@ -12,56 +13,67 @@
     android:background="@drawable/bg_tv_glass_card_selector"
     android:stateListAnimator="@animator/tv_focus_scale"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="12dp">
 
-    <!-- Top Row: Glass Format Chip -->
-    <LinearLayout
+    <!-- Thumbnail Preview Card -->
+    <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:layout_height="105dp"
+        app:cardCornerRadius="10dp"
+        app:cardElevation="0dp"
+        app:cardBackgroundColor="#151D30"
         android:layout_marginBottom="8dp">
 
-        <TextView
-            android:id="@+id/tvTvMediaBadge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_tv_glass_chip"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="3dp"
-            android:text="MKV"
-            android:textColor="@color/tv_accent_cyan"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.06" />
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
 
-        <View
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
+            <ImageView
+                android:id="@+id/ivTvMediaThumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="▶"
-            android:textColor="@color/tv_accent_cyan_glow"
-            android:textSize="11sp"
-            android:alpha="0.7" />
-    </LinearLayout>
+            <ImageView
+                android:id="@+id/ivTvMediaPlaceholder"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:src="@android:drawable/ic_media_play"
+                app:tint="@color/tv_accent_cyan"
+                android:alpha="0.4" />
+
+            <TextView
+                android:id="@+id/tvTvMediaBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|start"
+                android:layout_margin="6dp"
+                android:background="@drawable/bg_tv_glass_chip"
+                android:paddingHorizontal="7dp"
+                android:paddingVertical="2dp"
+                android:text="MKV"
+                android:textColor="@color/tv_accent_cyan"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.06" />
+
+        </FrameLayout>
+
+    </androidx.cardview.widget.CardView>
 
     <!-- Title -->
     <TextView
         android:id="@+id/tvTvMediaTitle"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:text="Video Title"
         android:textColor="@color/tv_text_primary"
-        android:textSize="15sp"
+        android:textSize="14sp"
         android:textStyle="bold"
-        android:maxLines="2"
+        android:maxLines="1"
         android:ellipsize="end"
-        android:lineSpacingExtra="2dp" />
+        android:layout_marginBottom="4dp" />
 
     <!-- Subtitle (Resolution • Size) -->
     <TextView

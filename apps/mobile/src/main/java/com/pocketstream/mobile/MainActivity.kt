@@ -18,6 +18,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.pocketstream.mobile.databinding.ActivityMainBinding
@@ -125,11 +127,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var statusBarHeightPx: Int = 0
+
+    private fun getStatusBarHeight(): Int {
+        if (statusBarHeightPx > 0) return statusBarHeightPx
+        var result = 0
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        if (resourceId > 0) {
+            result = resources.getDimensionPixelSize(resourceId)
+        }
+        return if (result > 0) result else (38 * resources.displayMetrics.density).toInt()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instance = this
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.rootContainer) { _, insets ->
+            val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            if (sysBars.top > 0) {
+                statusBarHeightPx = sysBars.top
+                updateLayoutForOrientation(resources.configuration.orientation)
+            }
+            insets
+        }
+
         updateLayoutForOrientation(resources.configuration.orientation)
 
         // Restore active playback state if activity was recreated
@@ -222,6 +246,9 @@ class MainActivity : AppCompatActivity() {
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
 
+        val statusBarTop = getStatusBarHeight()
+        val extraTopMargin = dp(8)
+
         if (isLandscape) {
             binding.rootContainer.setPadding(dp(12), dp(6), dp(12), dp(6))
             binding.mainContentLayout.orientation = LinearLayout.HORIZONTAL
@@ -243,7 +270,7 @@ class MainActivity : AppCompatActivity() {
                 binding.cardNowPlaying.layoutParams = lp
             }
         } else {
-            binding.rootContainer.setPadding(dp(16), dp(12), dp(16), dp(12))
+            binding.rootContainer.setPadding(dp(16), statusBarTop + extraTopMargin, dp(16), dp(12))
             binding.mainContentLayout.orientation = LinearLayout.VERTICAL
 
             val leftParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 0f).apply {
@@ -460,7 +487,6 @@ class MainActivity : AppCompatActivity() {
             val currentMedia = activeStreamingMediaId?.let { MediaRepository.getMediaById(it) }
             val isLiveTranscoded = currentMedia != null && (
                 TranscoderManager.isTranscoding(currentMedia.id) ||
-                currentMedia.is10Bit ||
                 activeStreamingMediaTitle.contains("[Live", ignoreCase = true) ||
                 activeStreamingMediaTitle.contains("[Converted", ignoreCase = true)
             ) && TranscoderManager.getTranscodedFile(this@MainActivity, currentMedia.id) == null
@@ -498,7 +524,6 @@ class MainActivity : AppCompatActivity() {
                     val currentMedia = activeStreamingMediaId?.let { MediaRepository.getMediaById(it) }
                     val isLiveTranscoded = currentMedia != null && (
                         TranscoderManager.isTranscoding(currentMedia.id) ||
-                        currentMedia.is10Bit ||
                         activeStreamingMediaTitle.contains("[Live", ignoreCase = true) ||
                         activeStreamingMediaTitle.contains("[Converted", ignoreCase = true)
                     ) && TranscoderManager.getTranscodedFile(this@MainActivity, currentMedia.id) == null
@@ -662,11 +687,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Dynamically evaluate video specs against TV hardware capabilities
-        val is10Bit = localMedia.is10Bit ||
-                item.title.contains("10bit", ignoreCase = true) ||
-                item.title.contains("10-bit", ignoreCase = true) ||
-                item.title.contains("hdr", ignoreCase = true)
+        // Technical analysis - NO filename matching
+        val is10Bit = localMedia.is10Bit
 
         val codecToCheck = localMedia.videoCodec.ifEmpty { localMedia.mimeType }
         val compatibility = tvCapabilities.checkCompatibility(
@@ -691,22 +713,53 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val bulletPoints = reasons.joinToString("\n") { "• $it" }
-        val tvName = if (connectedTvName.isNotEmpty()) connectedTvName else tvCapabilities.deviceModel
-        val messageText = "This video is not supported directly by your $tvName:\n\n$bulletPoints\n\nYour phone can real-time hardware-encode this video using its hardware encoder for smooth, stutter-free playback on your TV."
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_playback_compatibility, null)
+        val tvFilename = dialogView.findViewById<TextView>(R.id.tvCompatFilename)
+        val tvWarning = dialogView.findViewById<TextView>(R.id.tvCompatWarning)
+        val tvHdr = dialogView.findViewById<TextView>(R.id.tvCompatHdr)
+        val tvChip = dialogView.findViewById<TextView>(R.id.tvCompatChip)
+        val btnPrimary = dialogView.findViewById<Button>(R.id.btnCompatPrimary)
+        val btnSecondary = dialogView.findViewById<Button>(R.id.btnCompatSecondary)
+        val btnCancel = dialogView.findViewById<Button>(R.id.btnCompatCancel)
 
-        AlertDialog.Builder(this)
-            .setTitle(media.title)
-            .setMessage(messageText)
-            .setPositiveButton("Encode & Stream (Recommended)") { _, _ ->
-                startLiveStreamingAndTranscoding(media, localIp)
-            }
-            .setNeutralButton("Direct Play Anyway") { _, _ ->
-                val directUrl = "http://$localIp:8080/stream/${media.id}"
-                sendStreamToTv(directUrl, media.title, media.id, media.durationMs)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        tvFilename.text = media.title
+        val tvName = if (connectedTvName.isNotEmpty()) connectedTvName else tvCapabilities.deviceModel
+        val targetTv = if (tvName.isNotEmpty()) tvName else "TCL Android TV"
+        tvWarning.text = "This video is not supported directly by your $targetTv."
+
+        if (reasons.isNotEmpty()) {
+            tvHdr.text = reasons.first()
+        } else {
+            tvHdr.text = "10-bit color / HDR detected (TV hardware decoder only supports 8-bit)"
+        }
+        tvChip.text = "Your phone can real-time hardware-encode this video using its Snapdragon processor for smooth, stutter-free playback on your TV."
+
+        btnPrimary.text = "▶   Direct Play (Recommended)"
+        btnSecondary.text = "▷   Encode & Stream"
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnPrimary.setOnClickListener {
+            dialog.dismiss()
+            val directUrl = "http://$localIp:8080/stream/${media.id}"
+            sendStreamToTv(directUrl, media.title, media.id, media.durationMs)
+        }
+
+        btnSecondary.setOnClickListener {
+            dialog.dismiss()
+            startLiveStreamingAndTranscoding(media, localIp)
+        }
+
+        btnCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
     fun handleSeekAndTranscode(media: LocalMedia, positionMs: Long) {

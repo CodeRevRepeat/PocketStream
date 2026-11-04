@@ -22,6 +22,7 @@ import java.net.NetworkInterface
 class TvDiscoveryManager(
     private val context: Context,
     private val tvPort: Int = 8085,
+    private val getConnectedPhoneIp: () -> String? = { null },
     private val onPhoneDiscovered: (phoneIp: String, phonePort: Int, name: String) -> Unit,
     private val onPhoneDisconnected: () -> Unit = {}
 ) {
@@ -150,6 +151,11 @@ class TvDiscoveryManager(
                             override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
                                 val host = serviceInfo.host?.hostAddress ?: return
                                 val port = serviceInfo.port
+                                val currentConnected = getConnectedPhoneIp()
+                                if (!currentConnected.isNullOrEmpty() && currentConnected != host) {
+                                    Log.d(TAG, "NSD ignoring discovery from $host: already paired with $currentConnected")
+                                    return
+                                }
                                 Log.i(TAG, "NSD resolved phone: $host:$port")
                                 onPhoneDiscovered(host, port, "PocketStream Phone")
                             }
@@ -202,12 +208,35 @@ class TvDiscoveryManager(
                         val type = json.optString("type")
 
                         if (type == "PHONE_DISCONNECT") {
-                            Log.i(TAG, "UDP Phone announced disconnect: $msg")
-                            onPhoneDisconnected()
+                            val phoneIp = json.optString("phoneIp", senderIp).ifEmpty { senderIp }
+                            val currentConnected = getConnectedPhoneIp()
+                            if (currentConnected.isNullOrEmpty() || currentConnected == phoneIp || currentConnected == senderIp) {
+                                Log.i(TAG, "UDP Phone announced disconnect: $msg")
+                                onPhoneDisconnected()
+                            } else {
+                                Log.d(TAG, "Ignoring UDP disconnect from non-connected phone ($phoneIp vs $currentConnected)")
+                            }
                         } else if (type == "DISCOVER_TV" || type == "PHONE_ANNOUNCE") {
                             val phoneIp = json.optString("phoneIp", senderIp).ifEmpty { senderIp }
                             val phonePort = json.optInt("phonePort", 8080)
                             val name = json.optString("deviceName", "PocketStream Phone")
+
+                            val currentConnected = getConnectedPhoneIp()
+                            if (!currentConnected.isNullOrEmpty() && currentConnected != phoneIp) {
+                                Log.d(TAG, "Ignoring UDP discovery from $phoneIp: already paired with $currentConnected")
+                                val tvDeviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim().ifEmpty { "Android TV" }
+                                val replyJson = JSONObject().apply {
+                                    put("type", "TV_BUSY")
+                                    put("tvIp", getLocalIpAddress())
+                                    put("tvPort", tvPort)
+                                    put("deviceName", tvDeviceName)
+                                    put("message", "TV is already paired with another device")
+                                }
+                                val replyBytes = replyJson.toString().toByteArray(Charsets.UTF_8)
+                                val replyPacket = DatagramPacket(replyBytes, replyBytes.size, packet.address, packet.port)
+                                socket.send(replyPacket)
+                                continue
+                            }
 
                             Log.i(TAG, "UDP Phone discovered: $phoneIp:$phonePort ($name)")
                             onPhoneDiscovered(phoneIp, phonePort, name)

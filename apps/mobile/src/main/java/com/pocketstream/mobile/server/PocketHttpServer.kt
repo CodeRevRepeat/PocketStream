@@ -78,6 +78,15 @@ class PocketHttpServer(
                 )
             }
 
+            uri.startsWith("/api/v1/thumbnail/") && method == Method.GET -> {
+                val mediaId = uri.removePrefix("/api/v1/thumbnail/").substringBefore("/").substringBefore("?")
+                if (!mediaId.matches(SAFE_MEDIA_ID_REGEX)) {
+                    newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid media ID format")
+                } else {
+                    handleThumbnail(mediaId)
+                }
+            }
+
             uri.startsWith("/stream/live/") -> {
                 val mediaId = uri.removePrefix("/stream/live/").substringBefore("/").substringBefore("?")
                 if (!mediaId.matches(SAFE_MEDIA_ID_REGEX)) {
@@ -178,10 +187,7 @@ class PocketHttpServer(
                 } catch (_: Exception) {}
             }
 
-            val is10Bit = media.is10Bit ||
-                    media.title.contains("10bit", ignoreCase = true) ||
-                    media.title.contains("10-bit", ignoreCase = true) ||
-                    media.title.contains("hdr", ignoreCase = true)
+            val is10Bit = media.is10Bit
 
             val codecToCheck = media.videoCodec.ifEmpty { media.mimeType }
             val compatibility = tvCaps.checkCompatibility(
@@ -483,6 +489,27 @@ class PocketHttpServer(
         res.addHeader("Accept-Ranges", "bytes")
         res.addHeader("Content-Length", totalSize.toString())
         return res
+    }
+
+    private fun handleThumbnail(mediaId: String): Response {
+        val thumbFile = MediaRepository.getThumbnailFile(context, mediaId)
+        if (thumbFile.exists() && thumbFile.length() > 0) {
+            val fis = FileInputStream(thumbFile)
+            val res = newFixedLengthResponse(Response.Status.OK, "image/jpeg", fis, thumbFile.length())
+            res.addHeader("Cache-Control", "public, max-age=86400")
+            return addCorsHeaders(res)
+        }
+        val media = MediaRepository.getMediaById(mediaId)
+        if (media != null) {
+            val generated = MediaRepository.generateThumbnail(context, media)
+            if (generated != null && generated.exists() && generated.length() > 0) {
+                val fis = FileInputStream(generated)
+                val res = newFixedLengthResponse(Response.Status.OK, "image/jpeg", fis, generated.length())
+                res.addHeader("Cache-Control", "public, max-age=86400")
+                return addCorsHeaders(res)
+            }
+        }
+        return addCorsHeaders(newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Thumbnail not found"))
     }
 
     private class BoundedInputStream(

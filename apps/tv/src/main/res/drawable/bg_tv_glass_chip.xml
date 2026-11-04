@@ -5,5 +5,5 @@
     <solid android:color="@color/glass_chip_bg" />
     <stroke
         android:width="0.8dp"
-        android:color="#4038BDF8" />
+        android:color="#40C8F60D" />
 </shape>

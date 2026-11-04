@@ -1,0 +1,28 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Center chip body -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#C8F60D"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7,5h10a2,2 0 0,1 2,2v10a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V7a2,2 0 0,1 2,-2z M9,9h6v6H9z" />
+    <!-- Top & bottom pins -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#C8F60D"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:pathData="M9,2v3 M12,2v3 M15,2v3 M9,19v3 M12,19v3 M15,19v3" />
+    <!-- Left & right pins -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#C8F60D"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:pathData="M2,9h3 M2,12h3 M2,15h3 M19,9h3 M19,12h3 M19,15h3" />
+</vector>

@@ -19,7 +19,7 @@ public struct IncompatibleFormatView: View {
                     .foregroundColor(Color(hex: "#F8FAFC"))
                     .lineLimit(2)
 
-                Text("This video is not supported directly by your \(tvName):")
+                Text("This video format may have compatibility notes on your \(tvName):")
                     .font(.system(size: 13))
                     .foregroundColor(Color(hex: "#94A3B8"))
 
@@ -27,7 +27,7 @@ public struct IncompatibleFormatView: View {
                     ForEach(reasons, id: \.self) { reason in
                         HStack(alignment: .top, spacing: 6) {
                             Text("•")
-                                .foregroundColor(Color(hex: "#38BDF8"))
+                                .foregroundColor(Color(hex: "#C8F60D"))
                             Text(reason)
                                 .font(.system(size: 12))
                                 .foregroundColor(Color(hex: "#CBD5E1"))
@@ -36,23 +36,23 @@ public struct IncompatibleFormatView: View {
                 }
                 .padding(.vertical, 4)
 
-                Text("Your iPhone can real-time hardware-encode this video using its hardware encoder for smooth, stutter-free playback on your TV.")
+                Text("Direct Play is recommended first for best original quality. If playback stutters, has no audio, or fails on your TV, you can use Encode & Stream.")
                     .font(.system(size: 12))
                     .foregroundColor(Color(hex: "#94A3B8"))
 
                 VStack(spacing: 8) {
-                    Button(action: onEncodeAndStream) {
-                        Text("Encode & Stream (Recommended)")
+                    Button(action: onDirectPlay) {
+                        Text("Direct Play (Recommended)")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 42)
-                            .background(Color(hex: "#38BDF8"))
+                            .background(Color(hex: "#C8F60D"))
                             .cornerRadius(8)
                     }
 
-                    Button(action: onDirectPlay) {
-                        Text("Direct Play Anyway")
+                    Button(action: onEncodeAndStream) {
+                        Text("Encode & Stream")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(Color(hex: "#94A3B8"))
                             .frame(maxWidth: .infinity)

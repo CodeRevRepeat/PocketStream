@@ -40,8 +40,8 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="4dp"
-                    android:layout_marginBottom="12dp">
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="14dp">
 
                     <TextView
                         android:layout_width="0dp"
@@ -112,6 +112,9 @@
                                 android:text="Stop"
                                 android:textAllCaps="false"
                                 android:textSize="13sp"
+                                android:textColor="#000000"
+                                android:textStyle="bold"
+                                app:iconTint="#000000"
                                 app:backgroundTint="@color/accent_purple"
                                 app:cornerRadius="12dp" />
                         </LinearLayout>
@@ -223,8 +226,8 @@
                         android:text="+ Select Folder (SAF)"
                         android:textAllCaps="false"
                         android:textSize="12sp"
-                        android:textColor="@color/accent_cyan"
-                        app:strokeColor="@color/accent_cyan"
+                        android:textColor="@color/text_primary"
+                        app:strokeColor="@color/card_border"
                         app:cornerRadius="12dp" />
 
                     <com.google.android.material.button.MaterialButton
@@ -308,12 +311,15 @@
                 <!-- Select / Manage Button -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnToggleManageMode"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
                     android:text="Select"
                     android:textAllCaps="false"
                     android:textColor="@color/accent_cyan"
+                    app:strokeColor="@color/accent_cyan"
+                    app:strokeWidth="1.2dp"
+                    app:cornerRadius="18dp"
                     android:textSize="13sp" />
             </LinearLayout>
 

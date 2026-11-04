@@ -150,6 +150,7 @@ object TranscoderManager {
             .build()
 
         // 14-20 Mbps VBR High Profile with BT.709 Color Metadata for pristine dark scenes and zero banding
+        // Operating rate capped to 60 FPS to prevent phone overheating while maintaining 2.5x real-time encoding
         val videoEncoderSettings = VideoEncoderSettings.Builder()
             .setBitrate(14_000_000)
             .setBitrateMode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
@@ -157,6 +158,7 @@ object TranscoderManager {
                 MediaCodecInfo.CodecProfileLevel.AVCProfileHigh,
                 MediaCodecInfo.CodecProfileLevel.AVCLevel42
             )
+            .setEncoderPerformanceParameters(60, VideoEncoderSettings.NO_VALUE)
             .build()
 
         val encoderFactory = DefaultEncoderFactory.Builder(context)

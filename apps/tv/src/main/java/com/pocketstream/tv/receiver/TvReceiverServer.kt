@@ -7,6 +7,7 @@ import org.json.JSONObject
 
 class TvReceiverServer(
     port: Int = 8085,
+    private val getConnectedPhoneIp: () -> String?,
     private val onPlayRequested: (streamUrl: String, title: String, durationMs: Long, startPositionMs: Long) -> Unit,
     private val onControlRequested: (action: String, positionMs: Long) -> Unit,
     private val getPlaybackStatus: () -> Triple<Boolean, Long, Long>,
@@ -45,6 +46,17 @@ class TvReceiverServer(
                     val phoneIp = json.getString("phoneIp")
                     val phonePort = json.optInt("phonePort", 8080)
                     val deviceName = json.optString("deviceName", "PocketStream Phone")
+
+                    val currentConnected = getConnectedPhoneIp()
+                    if (!currentConnected.isNullOrEmpty() && currentConnected != phoneIp) {
+                        Log.w(TAG, "Rejecting /pair from $phoneIp: TV is already connected to $currentConnected")
+                        val conflictJson = JSONObject().apply {
+                            put("status", "busy")
+                            put("message", "TV is already connected to another device ($currentConnected)")
+                        }
+                        return addCorsHeaders(newFixedLengthResponse(Response.Status.CONFLICT, "application/json", conflictJson.toString()))
+                    }
+
                     onPairRequested(phoneIp, phonePort, deviceName)
 
                     val caps = TvCapabilityDetector.getCapabilities()
@@ -65,9 +77,16 @@ class TvReceiverServer(
             }
 
             uri == "/disconnect" && method == Method.POST -> {
-                Log.i(TAG, "Received disconnect request from phone")
-                onDisconnectRequested()
-                newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"disconnected\"}")
+                val currentConnected = getConnectedPhoneIp()
+                val clientIp = session.remoteIpAddress
+                if (currentConnected.isNullOrEmpty() || currentConnected == clientIp) {
+                    Log.i(TAG, "Received disconnect request from phone ($clientIp)")
+                    onDisconnectRequested()
+                    newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"disconnected\"}")
+                } else {
+                    Log.w(TAG, "Ignoring disconnect request from non-connected phone ($clientIp vs $currentConnected)")
+                    newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", "{\"status\":\"forbidden\"}")
+                }
             }
 
             uri == "/refresh" && method == Method.POST -> {
@@ -77,6 +96,16 @@ class TvReceiverServer(
             }
 
             uri == "/play" && method == Method.POST -> {
+                val currentConnected = getConnectedPhoneIp()
+                val clientIp = session.remoteIpAddress
+                if (!currentConnected.isNullOrEmpty() && currentConnected != clientIp) {
+                    Log.w(TAG, "Rejecting /play from unauthorized device ($clientIp vs $currentConnected)")
+                    val conflictJson = JSONObject().apply {
+                        put("status", "busy")
+                        put("message", "TV is already connected to another device")
+                    }
+                    return addCorsHeaders(newFixedLengthResponse(Response.Status.CONFLICT, "application/json", conflictJson.toString()))
+                }
                 val map = mutableMapOf<String, String>()
                 session.parseBody(map)
                 val postData = map["postData"] ?: ""
@@ -94,6 +123,12 @@ class TvReceiverServer(
             }
 
             uri == "/control" && method == Method.POST -> {
+                val currentConnected = getConnectedPhoneIp()
+                val clientIp = session.remoteIpAddress
+                if (!currentConnected.isNullOrEmpty() && currentConnected != clientIp) {
+                    Log.w(TAG, "Rejecting /control from unauthorized device ($clientIp vs $currentConnected)")
+                    return addCorsHeaders(newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", "{\"status\":\"forbidden\"}"))
+                }
                 val map = mutableMapOf<String, String>()
                 session.parseBody(map)
                 val postData = map["postData"] ?: ""

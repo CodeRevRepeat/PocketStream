@@ -130,9 +130,66 @@ object MediaRepository {
                 approvedFileUris.remove(item.uri)
             }
             excludedIds.add(id)
+            try {
+                getThumbnailFile(context, id).delete()
+            } catch (_: Exception) {}
         }
         savePersistedState(context)
         onLibraryUpdated?.invoke()
+    }
+
+    fun getThumbnailFile(context: Context, id: String): java.io.File {
+        val dir = java.io.File(context.filesDir, "thumbnails")
+        if (!dir.exists()) dir.mkdirs()
+        return java.io.File(dir, "thumb_$id.jpg")
+    }
+
+    fun generateThumbnail(context: Context, media: LocalMedia): java.io.File? {
+        val thumbFile = getThumbnailFile(context, media.id)
+        if (thumbFile.exists() && thumbFile.length() > 0) return thumbFile
+
+        val mmr = MediaMetadataRetriever()
+        try {
+            mmr.setDataSource(context, media.uri)
+            val durationMs = media.durationMs.takeIf { it > 0 }
+                ?: (mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L)
+            val targetMs = if (durationMs > 6000L) {
+                (durationMs * 0.10).toLong().coerceAtLeast(3000L)
+            } else if (durationMs > 0L) {
+                durationMs / 2
+            } else {
+                0L
+            }
+            val timeUs = targetMs * 1000L
+            val frameBitmap = mmr.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: mmr.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+                ?: mmr.frameAtTime
+
+            if (frameBitmap != null) {
+                val maxW = 480
+                val scaled = if (frameBitmap.width > maxW) {
+                    val scale = maxW.toFloat() / frameBitmap.width.toFloat()
+                    val targetH = (frameBitmap.height * scale).toInt().coerceAtLeast(1)
+                    android.graphics.Bitmap.createScaledBitmap(frameBitmap, maxW, targetH, true)
+                } else {
+                    frameBitmap
+                }
+                thumbFile.parentFile?.mkdirs()
+                java.io.FileOutputStream(thumbFile).use { out ->
+                    scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
+                }
+                if (scaled != frameBitmap) {
+                    scaled.recycle()
+                }
+                frameBitmap.recycle()
+                return thumbFile
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error generating thumbnail for ${media.id}: ${e.message}")
+        } finally {
+            try { mmr.release() } catch (_: Exception) {}
+        }
+        return if (thumbFile.exists() && thumbFile.length() > 0) thumbFile else null
     }
 
     fun getMediaById(id: String): LocalMedia? {
@@ -154,7 +211,8 @@ object MediaRepository {
                     height = local.height,
                     videoCodec = if (local.is10Bit) "HEVC 10-bit" else local.videoCodec,
                     audioCodec = local.audioCodec,
-                    streamPath = "/stream/${local.id}"
+                    streamPath = "/stream/${local.id}",
+                    thumbnailPath = "/api/v1/thumbnail/${local.id}"
                 )
             }.sortedByDescending { it.sizeBytes }
     }
@@ -236,10 +294,10 @@ object MediaRepository {
             else -> "video/mp4"
         }
 
-        var is10Bit = title.contains("10bit", ignoreCase = true) ||
-                      title.contains("10-bit", ignoreCase = true) ||
-                      title.contains("hdr", ignoreCase = true)
+        // Pure technical analysis - NO filename string matching!
+        var is10Bit = false
 
+        val id = UUID.nameUUIDFromBytes(uri.toString().toByteArray()).toString().substring(0, 8)
         var durationMs = 0L
         var width = 0
         var height = 0
@@ -256,6 +314,45 @@ object MediaRepository {
                 val colorStandard = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_COLOR_STANDARD)?.toIntOrNull() ?: 0
                 if (colorTransfer == 6 || colorTransfer == 7 || colorStandard == 6) {
                     is10Bit = true
+                }
+            }
+
+            // Extract thumbnail at 10% timeline position
+            val thumbFile = getThumbnailFile(context, id)
+            if (!thumbFile.exists() || thumbFile.length() == 0L) {
+                try {
+                    val targetMs = if (durationMs > 6000L) {
+                        (durationMs * 0.10).toLong().coerceAtLeast(3000L)
+                    } else if (durationMs > 0L) {
+                        durationMs / 2
+                    } else {
+                        0L
+                    }
+                    val timeUs = targetMs * 1000L
+                    val frameBitmap = mmr.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                        ?: mmr.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+                        ?: mmr.frameAtTime
+
+                    if (frameBitmap != null) {
+                        val maxW = 480
+                        val scaled = if (frameBitmap.width > maxW) {
+                            val scale = maxW.toFloat() / frameBitmap.width.toFloat()
+                            val targetH = (frameBitmap.height * scale).toInt().coerceAtLeast(1)
+                            android.graphics.Bitmap.createScaledBitmap(frameBitmap, maxW, targetH, true)
+                        } else {
+                            frameBitmap
+                        }
+                        thumbFile.parentFile?.mkdirs()
+                        java.io.FileOutputStream(thumbFile).use { out ->
+                            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
+                        }
+                        if (scaled != frameBitmap) {
+                            scaled.recycle()
+                        }
+                        frameBitmap.recycle()
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Thumbnail extraction failed for $id: ${e.message}")
                 }
             }
         } catch (e: Exception) {
@@ -281,11 +378,58 @@ object MediaRepository {
                     }
                     if (format.containsKey(android.media.MediaFormat.KEY_PROFILE)) {
                         val profile = format.getInteger(android.media.MediaFormat.KEY_PROFILE)
+                        // HEVC 10-bit profiles (Main 10, Main 10 HDR10, Main 10 HDR10+)
                         if (profile == android.media.MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 ||
                             profile == android.media.MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10 ||
                             profile == android.media.MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10Plus) {
                             is10Bit = true
                         }
+                        // AVC 10-bit profiles (High 10, High 4:2:2, High 4:4:4)
+                        if (profile == android.media.MediaCodecInfo.CodecProfileLevel.AVCProfileHigh10 ||
+                            profile == android.media.MediaCodecInfo.CodecProfileLevel.AVCProfileHigh422 ||
+                            profile == android.media.MediaCodecInfo.CodecProfileLevel.AVCProfileHigh444) {
+                            is10Bit = true
+                        }
+                        // VP9 10-bit profiles (Profile 2, Profile 3)
+                        if (profile == android.media.MediaCodecInfo.CodecProfileLevel.VP9Profile2 ||
+                            profile == android.media.MediaCodecInfo.CodecProfileLevel.VP9Profile2HDR ||
+                            profile == android.media.MediaCodecInfo.CodecProfileLevel.VP9Profile2HDR10Plus ||
+                            profile == android.media.MediaCodecInfo.CodecProfileLevel.VP9Profile3 ||
+                            profile == android.media.MediaCodecInfo.CodecProfileLevel.VP9Profile3HDR ||
+                            profile == android.media.MediaCodecInfo.CodecProfileLevel.VP9Profile3HDR10Plus) {
+                            is10Bit = true
+                        }
+                        // AV1 10-bit profiles
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                            if (profile == android.media.MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10 ||
+                                profile == android.media.MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10 ||
+                                profile == android.media.MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10Plus) {
+                                is10Bit = true
+                            }
+                        }
+                    }
+
+                    // Check MediaFormat color transfer & standard
+                    if (format.containsKey(android.media.MediaFormat.KEY_COLOR_TRANSFER)) {
+                        val transfer = format.getInteger(android.media.MediaFormat.KEY_COLOR_TRANSFER)
+                        if (transfer == android.media.MediaFormat.COLOR_TRANSFER_ST2084 ||
+                            transfer == android.media.MediaFormat.COLOR_TRANSFER_HLG) {
+                            is10Bit = true
+                        }
+                    }
+                    if (format.containsKey(android.media.MediaFormat.KEY_COLOR_STANDARD)) {
+                        val standard = format.getInteger(android.media.MediaFormat.KEY_COLOR_STANDARD)
+                        if (standard == android.media.MediaFormat.COLOR_STANDARD_BT2020) {
+                            is10Bit = true
+                        }
+                    }
+
+                    // Check bit-depth if reported by track format
+                    if (format.containsKey("bits-per-sample") && format.getInteger("bits-per-sample") > 8) {
+                        is10Bit = true
+                    }
+                    if (format.containsKey("bit-depth") && format.getInteger("bit-depth") > 8) {
+                        is10Bit = true
                     }
                     break
                 }
@@ -295,7 +439,6 @@ object MediaRepository {
             try { extractor?.release() } catch (_: Exception) {}
         }
 
-        val id = UUID.nameUUIDFromBytes(uri.toString().toByteArray()).toString().substring(0, 8)
         return LocalMedia(
             id = id,
             uri = uri,

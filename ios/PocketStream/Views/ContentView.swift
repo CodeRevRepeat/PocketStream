@@ -200,7 +200,7 @@ public struct ContentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(Color(hex: "#38BDF8"))
+                        .fill(Color(hex: "#C8F60D"))
                         .frame(width: 8, height: 8)
                     Text("PocketStream")
                         .font(.system(size: 22, weight: .bold))
@@ -218,7 +218,7 @@ public struct ContentView: View {
         HStack {
             Image(systemName: "tv")
                 .font(.system(size: 24))
-                .foregroundColor(Color(hex: "#38BDF8"))
+                .foregroundColor(Color(hex: "#C8F60D"))
                 .frame(width: 44, height: 44)
                 .background(Color(hex: "#1E293B"))
                 .cornerRadius(10)
@@ -230,7 +230,7 @@ public struct ContentView: View {
                         .foregroundColor(Color(hex: "#F8FAFC"))
                     Text("\(tv.ip):\(tv.port) • Connected")
                         .font(.system(size: 12))
-                        .foregroundColor(Color(hex: "#38BDF8"))
+                        .foregroundColor(Color(hex: "#C8F60D"))
                 } else {
                     Text("No TV Connected")
                         .font(.system(size: 15, weight: .bold))
@@ -249,7 +249,7 @@ public struct ContentView: View {
                     Text("Scan TV")
                 }
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(Color(hex: "#38BDF8"))
+                .foregroundColor(Color(hex: "#C8F60D"))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(Color(hex: "#1E293B"))
@@ -296,7 +296,7 @@ public struct ContentView: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(server.isRunning ? Color(hex: "#EF4444") : Color(hex: "#38BDF8"))
+                .background(server.isRunning ? Color(hex: "#EF4444") : Color(hex: "#C8F60D"))
                 .cornerRadius(8)
             }
         }
@@ -321,7 +321,7 @@ public struct ContentView: View {
                 Button(action: { showFilePicker = true }) {
                     Label("Add Videos", systemImage: "plus")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Color(hex: "#38BDF8"))
+                        .foregroundColor(Color(hex: "#C8F60D"))
                 }
 
                 Button(action: { isSelectionMode.toggle(); selectedIds.removeAll() }) {
@@ -337,7 +337,7 @@ public struct ContentView: View {
                     Button(action: selectAllOrNone) {
                         Text(selectedIds.count == mediaRepo.mediaList.count ? "Deselect All" : "Select All")
                             .font(.system(size: 12))
-                            .foregroundColor(Color(hex: "#38BDF8"))
+                            .foregroundColor(Color(hex: "#C8F60D"))
                     }
 
                     Spacer()
@@ -385,7 +385,7 @@ public struct ContentView: View {
         HStack(spacing: 12) {
             if isSelectionMode {
                 Image(systemName: selectedIds.contains(media.id) ? "checkmark.circle.fill" : "circle")
-                    .foregroundColor(selectedIds.contains(media.id) ? Color(hex: "#38BDF8") : Color(hex: "#64748B"))
+                    .foregroundColor(selectedIds.contains(media.id) ? Color(hex: "#C8F60D") : Color(hex: "#64748B"))
                     .font(.system(size: 20))
                     .onTapGesture {
                         if selectedIds.contains(media.id) {
@@ -403,7 +403,7 @@ public struct ContentView: View {
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
-                    badge(text: (media.width >= 1920 || media.height >= 1080) ? "1080p" : "720p", color: Color(hex: "#38BDF8"))
+                    badge(text: (media.width >= 1920 || media.height >= 1080) ? "1080p" : "720p", color: Color(hex: "#C8F60D"))
                     badge(text: media.formattedDuration, color: Color(hex: "#818CF8"))
                     badge(text: media.formattedSize, color: Color(hex: "#94A3B8"))
                     if media.is10Bit {
@@ -421,7 +421,7 @@ public struct ContentView: View {
                 Button(action: { handleMediaSelection(media: media) }) {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: 28))
-                        .foregroundColor(Color(hex: "#38BDF8"))
+                        .foregroundColor(Color(hex: "#C8F60D"))
                 }
             }
         }
@@ -430,7 +430,7 @@ public struct ContentView: View {
         .cornerRadius(10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(activeStreamId == media.id ? Color(hex: "#38BDF8") : Color(hex: "#24324D"), lineWidth: 1)
+                .stroke(activeStreamId == media.id ? Color(hex: "#C8F60D") : Color(hex: "#24324D"), lineWidth: 1)
         )
     }
 
@@ -498,7 +498,7 @@ public struct ContentView: View {
                     }
                 }
             )
-            .accentColor(Color(hex: "#38BDF8"))
+            .accentColor(Color(hex: "#C8F60D"))
 
             // Transport Control Buttons
             HStack(spacing: 24) {
@@ -517,7 +517,7 @@ public struct ContentView: View {
                 Button(action: { sendTvControl(action: tvIsPlaying ? "PAUSE" : "PLAY") }) {
                     Image(systemName: tvIsPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 38))
-                        .foregroundColor(Color(hex: "#38BDF8"))
+                        .foregroundColor(Color(hex: "#C8F60D"))
                 }
 
                 Button(action: { sendTvControl(action: "FF") }) {
@@ -538,7 +538,7 @@ public struct ContentView: View {
         .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(hex: "#38BDF8").opacity(0.4), lineWidth: 1)
+                .stroke(Color(hex: "#C8F60D").opacity(0.4), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.4), radius: 10, y: 4)
     }
@@ -665,7 +665,7 @@ public struct ContentView: View {
             return
         }
 
-        let isLiveTranscoded = (TranscoderManager.shared.isTranscoding(id: media.id) || media.is10Bit) &&
+        let isLiveTranscoded = TranscoderManager.shared.isTranscoding(id: media.id) &&
                                TranscoderManager.shared.getTranscodedFile(id: media.id) == nil
 
         if isLiveTranscoded {
@@ -680,7 +680,7 @@ public struct ContentView: View {
             sendTvControl(action: "RESTART")
             return
         }
-        let isLiveTranscoded = (TranscoderManager.shared.isTranscoding(id: media.id) || media.is10Bit) &&
+        let isLiveTranscoded = TranscoderManager.shared.isTranscoding(id: media.id) &&
                                TranscoderManager.shared.getTranscodedFile(id: media.id) == nil
         if isLiveTranscoded {
             startLiveStreamingAndTranscoding(media: media, startPositionMs: 0)

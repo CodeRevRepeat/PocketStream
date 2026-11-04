@@ -149,7 +149,10 @@ public class PocketHttpServer: ObservableObject {
         case "/api/v1/transcode/seek":
             handleTranscodeSeek(postBody: postBody, connection: connection)
         default:
-            if path.hasPrefix("/stream/live/") {
+            if path.hasPrefix("/api/v1/thumbnail/") {
+                let mediaId = path.replacingOccurrences(of: "/api/v1/thumbnail/", with: "").components(separatedBy: "/")[0].components(separatedBy: "?")[0]
+                handleThumbnail(mediaId: mediaId, connection: connection)
+            } else if path.hasPrefix("/stream/live/") {
                 let mediaId = path.replacingOccurrences(of: "/stream/live/", with: "").components(separatedBy: "/")[0]
                 handleStreamFile(mediaId: mediaId, isLive: true, headers: headers, connection: connection)
             } else if path.hasPrefix("/stream/transcoded/") {
@@ -171,6 +174,19 @@ public class PocketHttpServer: ObservableObject {
         if let json = try? JSONSerialization.data(withJSONObject: status.toDictionary(), options: []) {
             sendResponse(connection: connection, status: "200 OK", headers: ["Content-Type": "application/json"], body: json)
         }
+    }
+
+    private func handleThumbnail(mediaId: String, connection: NWConnection) {
+        let thumbUrl = MediaRepository.shared.getThumbnailFile(id: mediaId)
+        if FileManager.default.fileExists(atPath: thumbUrl.path), let data = try? Data(contentsOf: thumbUrl) {
+            sendResponse(connection: connection, status: "200 OK", headers: ["Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400"], body: data)
+            return
+        }
+        if let media = MediaRepository.shared.getMedia(by: mediaId), let generated = MediaRepository.shared.generateThumbnail(for: media), let data = try? Data(contentsOf: generated) {
+            sendResponse(connection: connection, status: "200 OK", headers: ["Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400"], body: data)
+            return
+        }
+        sendResponse(connection: connection, status: "404 Not Found", headers: [:], body: "Thumbnail not found".data(using: .utf8) ?? Data())
     }
 
     private func handleLibrary(connection: NWConnection) {

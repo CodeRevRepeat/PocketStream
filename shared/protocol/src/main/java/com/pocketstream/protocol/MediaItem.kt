@@ -12,7 +12,8 @@ data class MediaItem(
     val height: Int = 0,
     val videoCodec: String = "",
     val audioCodec: String = "",
-    val streamPath: String = "/stream/$id"
+    val streamPath: String = "/stream/$id",
+    val thumbnailPath: String = "/api/v1/thumbnail/$id"
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -25,6 +26,7 @@ data class MediaItem(
         put("videoCodec", videoCodec)
         put("audioCodec", audioCodec)
         put("streamPath", streamPath)
+        put("thumbnailPath", thumbnailPath)
     }
 
     companion object {
@@ -40,7 +42,8 @@ data class MediaItem(
                 height = json.optInt("height", 0),
                 videoCodec = json.optString("videoCodec", ""),
                 audioCodec = json.optString("audioCodec", ""),
-                streamPath = json.optString("streamPath", "/stream/$mediaId")
+                streamPath = json.optString("streamPath", "/stream/$mediaId"),
+                thumbnailPath = json.optString("thumbnailPath", "/api/v1/thumbnail/$mediaId")
             )
         }
     }

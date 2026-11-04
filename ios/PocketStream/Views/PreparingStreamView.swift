@@ -14,14 +14,14 @@ public struct PreparingStreamView: View {
 
             VStack(spacing: 16) {
                 ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: Color(hex: "#38BDF8")))
+                    .progressViewStyle(CircularProgressViewStyle(tint: Color(hex: "#C8F60D")))
                     .scaleEffect(1.5)
                     .padding(.top, 8)
                     .padding(.bottom, 6)
 
                 Text(title)
                     .font(.system(size: 19, weight: .bold))
-                    .foregroundColor(Color(hex: "#38BDF8"))
+                    .foregroundColor(Color(hex: "#C8F60D"))
                     .multilineTextAlignment(.center)
 
                 Text(subtitle)
@@ -38,12 +38,12 @@ public struct PreparingStreamView: View {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(hex: "#38BDF8").opacity(0.2))
+                            .fill(Color(hex: "#C8F60D").opacity(0.2))
                             .frame(height: 8)
 
                         let width = geo.size.width * CGFloat(15 - secondsRemaining) / 15.0
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(hex: "#38BDF8"))
+                            .fill(Color(hex: "#C8F60D"))
                             .frame(width: max(0, min(width, geo.size.width)), height: 8)
                     }
                 }

@@ -234,6 +234,7 @@ class MainActivity : AppCompatActivity() {
         try {
             receiverServer = TvReceiverServer(
                 port = 8085,
+                getConnectedPhoneIp = { getConnectedPhoneIp() },
                 onPlayRequested = { streamUrl, title, durationMs, startPositionMs ->
                     runOnUiThread {
                         val bringToFront = Intent(this@MainActivity, MainActivity::class.java).apply {
@@ -284,8 +285,11 @@ class MainActivity : AppCompatActivity() {
                 },
                 onPairRequested = { phoneIp, phonePort, deviceName ->
                     runOnUiThread {
+                        val alreadyPairedWithThisPhone = (phoneBaseUrl.isNotEmpty() && getConnectedPhoneIp() == phoneIp)
                         onPhoneConnected(phoneIp, phonePort, deviceName)
-                        Toast.makeText(this@MainActivity, "Paired with $deviceName ($phoneIp:$phonePort)!", Toast.LENGTH_SHORT).show()
+                        if (!alreadyPairedWithThisPhone && binding.layoutPlayer.visibility != View.VISIBLE && !isPlaying) {
+                            Toast.makeText(this@MainActivity, "Paired with $deviceName ($phoneIp:$phonePort)!", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 },
                 onDisconnectRequested = {
@@ -311,12 +315,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnPairPhone.setOnClickListener {
-            showQrPairDialog()
-        }
-
-        binding.btnTestStream.setOnClickListener {
-            val testUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-            startPlayback(testUrl, "Big Buck Bunny (Sample)")
+            if (phoneBaseUrl.isNotEmpty()) {
+                disconnectPhoneManually()
+            } else {
+                showQrPairDialog()
+            }
         }
 
         // Restart from beginning
@@ -560,14 +563,59 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun getConnectedPhoneIp(): String? {
+        if (phoneBaseUrl.isEmpty()) return null
+        return try {
+            val uri = java.net.URI(phoneBaseUrl)
+            uri.host ?: phoneBaseUrl.substringAfter("://").substringBefore(":")
+        } catch (_: Exception) {
+            phoneBaseUrl.substringAfter("://").substringBefore(":")
+        }.ifEmpty { null }
+    }
+
+    private fun disconnectPhoneManually() {
+        val currentUrl = phoneBaseUrl
+        if (currentUrl.isNotEmpty()) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val req = Request.Builder()
+                        .url("$currentUrl/disconnect")
+                        .post("{}".toRequestBody("application/json".toMediaType()))
+                        .build()
+                    httpClient.newCall(req).execute().close()
+                } catch (_: Exception) {}
+            }
+        }
+        phoneBaseUrl = ""
+        connectedPhoneName = ""
+        getSharedPreferences("pocketstream_tv_prefs", MODE_PRIVATE).edit()
+            .remove("last_phone_ip")
+            .remove("last_phone_port")
+            .remove("last_phone_name")
+            .apply()
+
+        updatePhoneConnectionUi(false, "Phone disconnected")
+        binding.tvTvEmptyNotice.text = "Phone disconnected. Tap 'Pair Phone (QR Code)' above or start server on phone."
+        binding.tvTvEmptyNotice.visibility = View.VISIBLE
+        binding.rvTvMediaList.visibility = View.GONE
+        adapter.updateList(emptyList())
+
+        if (binding.layoutPlayer.visibility == View.VISIBLE || isPlaying) {
+            stopPlayback()
+        }
+        Toast.makeText(this@MainActivity, "Phone disconnected", Toast.LENGTH_SHORT).show()
+    }
+
     private fun updatePhoneConnectionUi(connected: Boolean, text: String) {
         binding.tvTvPhoneStatus.text = text
         if (connected) {
             binding.tvTvPhoneStatus.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
             binding.vTvStatusDot.setBackgroundResource(R.drawable.bg_tv_status_dot_online)
+            binding.btnPairPhone.text = "✕  Disconnect Phone"
         } else {
             binding.tvTvPhoneStatus.setTextColor(android.graphics.Color.parseColor("#FF5252"))
             binding.vTvStatusDot.setBackgroundResource(R.drawable.bg_tv_status_dot_offline)
+            binding.btnPairPhone.text = "⊞  Pair Phone (QR Code)"
         }
     }
 
@@ -575,6 +623,7 @@ class MainActivity : AppCompatActivity() {
         binding.tvTvPhoneStatus.text = text
         binding.tvTvPhoneStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
         binding.vTvStatusDot.setBackgroundResource(R.drawable.bg_tv_status_dot_searching)
+        binding.btnPairPhone.text = if (phoneBaseUrl.isNotEmpty()) "✕  Disconnect Phone" else "⊞  Pair Phone (QR Code)"
     }
 
     private fun fetchLibrary() {
@@ -622,7 +671,7 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     val displayName = if (connectedPhoneName.isNotEmpty()) connectedPhoneName else "Phone"
                     updatePhoneConnectionUi(true, "Connected to $displayName ($phoneBaseUrl)")
-                    adapter.updateList(items)
+                    adapter.updateList(items, baseUrl = phoneBaseUrl)
                     if (items.isEmpty()) {
                         binding.tvTvEmptyNotice.text = "No videos found in phone library. Add videos in PocketStream Mobile."
                         binding.tvTvEmptyNotice.visibility = View.VISIBLE
@@ -635,11 +684,20 @@ class MainActivity : AppCompatActivity() {
             } else {
                 withContext(Dispatchers.Main) {
                     android.util.Log.w("MainActivity", "fetchLibrary failed after 4 retries: ${lastError?.message}")
-                    updatePhoneConnectionUi(false, "Phone disconnected")
-                    binding.tvTvEmptyNotice.text = "Phone disconnected. Please start the media server on your phone."
-                    binding.tvTvEmptyNotice.visibility = View.VISIBLE
-                    binding.rvTvMediaList.visibility = View.GONE
-                    adapter.updateList(emptyList())
+                    if (phoneBaseUrl.isNotEmpty()) {
+                        val displayName = if (connectedPhoneName.isNotEmpty()) connectedPhoneName else "Phone"
+                        updatePhoneConnectionUi(true, "Connected to $displayName (Server unreachable)")
+                        if (adapter.itemCount == 0) {
+                            binding.tvTvEmptyNotice.text = "Could not fetch library from phone. Check if media server is running."
+                            binding.tvTvEmptyNotice.visibility = View.VISIBLE
+                        }
+                    } else {
+                        updatePhoneConnectionUi(false, "Phone disconnected")
+                        binding.tvTvEmptyNotice.text = "Phone disconnected. Tap 'Pair Phone (QR Code)' above or start server on phone."
+                        binding.tvTvEmptyNotice.visibility = View.VISIBLE
+                        binding.rvTvMediaList.visibility = View.GONE
+                        adapter.updateList(emptyList())
+                    }
                 }
             }
         }
@@ -721,41 +779,10 @@ class MainActivity : AppCompatActivity() {
     private fun startHealthCheck() {
         healthCheckJob?.cancel()
         healthCheckJob = CoroutineScope(Dispatchers.IO).launch {
-            var consecutiveFailures = 0
             while (isActive) {
-                kotlinx.coroutines.delay(3500)
-                if (isPlaying || binding.layoutPlayer.visibility == View.VISIBLE) {
-                    consecutiveFailures = 0
-                    continue
-                }
-                if (phoneBaseUrl.isNotEmpty()) {
-                    try {
-                        val pingReq = Request.Builder()
-                            .url("$phoneBaseUrl/api/v1/library")
-                            .get()
-                            .build()
-                        val res = httpClient.newCall(pingReq).execute()
-                        if (res.isSuccessful) {
-                            consecutiveFailures = 0
-                        } else {
-                            consecutiveFailures++
-                        }
-                        res.close()
-                    } catch (e: Exception) {
-                        consecutiveFailures++
-                    }
-
-                    if (consecutiveFailures >= 4) {
-                        consecutiveFailures = 0
-                        withContext(Dispatchers.Main) {
-                            if (phoneBaseUrl.isNotEmpty() && !isPlaying) {
-                                onPhoneDisconnected()
-                            }
-                        }
-                    }
-                } else {
-                    consecutiveFailures = 0
-                }
+                kotlinx.coroutines.delay(10000)
+                // Connection is kept alive until user disconnects manually or phone sends explicit disconnect.
+                // We do NOT drop connection automatically on failed pings.
             }
         }
     }
@@ -765,9 +792,12 @@ class MainActivity : AppCompatActivity() {
         discoveryManager = TvDiscoveryManager(
             context = this,
             tvPort = 8085,
+            getConnectedPhoneIp = { getConnectedPhoneIp() },
             onPhoneDiscovered = { phoneIp, phonePort, name ->
                 runOnUiThread {
-                    onPhoneConnected(phoneIp, phonePort, name)
+                    if (phoneBaseUrl.isEmpty()) {
+                        onPhoneConnected(phoneIp, phonePort, name)
+                    }
                 }
             },
             onPhoneDisconnected = {

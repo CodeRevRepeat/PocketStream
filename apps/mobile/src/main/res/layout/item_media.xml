@@ -30,13 +30,14 @@
             android:buttonTint="@color/accent_cyan"
             android:visibility="gone" />
 
-        <ImageView
+        <com.google.android.material.imageview.ShapeableImageView
             android:id="@+id/imgMediaIcon"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:background="@drawable/bg_media_badge"
             android:padding="12dp"
             android:src="@android:drawable/ic_media_play"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Medium"
             app:tint="@color/accent_cyan" />
 
         <LinearLayout
@@ -69,15 +70,17 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnStreamToTv"
-            style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
+            android:layout_height="36dp"
             android:layout_marginStart="8dp"
             android:text="Stream to TV"
             android:textAllCaps="false"
             android:textSize="12sp"
-            app:backgroundTint="@color/accent_purple"
-            app:cornerRadius="12dp" />
+            android:textColor="@color/accent_cyan"
+            app:strokeColor="@color/accent_cyan"
+            app:strokeWidth="1.2dp"
+            app:cornerRadius="18dp" />
 
     </LinearLayout>
 

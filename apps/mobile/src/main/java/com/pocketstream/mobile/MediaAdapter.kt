@@ -94,6 +94,23 @@ class MediaAdapter(
             val resStr = if (item.height > 0) "${item.height}p • " else ""
             binding.tvMediaSubtitle.text = "$resStr$format • $sizeStr"
 
+            val thumbFile = com.pocketstream.mobile.storage.MediaRepository.getThumbnailFile(binding.root.context, item.id)
+            if (thumbFile.exists() && thumbFile.length() > 0) {
+                val bmp = android.graphics.BitmapFactory.decodeFile(thumbFile.absolutePath)
+                if (bmp != null) {
+                    binding.imgMediaIcon.setImageBitmap(bmp)
+                    binding.imgMediaIcon.background = null
+                    binding.imgMediaIcon.setPadding(0, 0, 0, 0)
+                    binding.imgMediaIcon.imageTintList = null
+                    binding.imgMediaIcon.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                    binding.imgMediaIcon.clipToOutline = true
+                } else {
+                    resetDefaultIcon()
+                }
+            } else {
+                resetDefaultIcon()
+            }
+
             if (isSelectionMode) {
                 binding.cbSelect.visibility = View.VISIBLE
                 binding.btnStreamToTv.visibility = View.GONE
@@ -131,6 +148,15 @@ class MediaAdapter(
                     }
                 }
             }
+        }
+
+        private fun resetDefaultIcon() {
+            binding.imgMediaIcon.setImageResource(android.R.drawable.ic_media_play)
+            binding.imgMediaIcon.setBackgroundResource(R.drawable.bg_media_badge)
+            val pad = (12 * binding.root.context.resources.displayMetrics.density).toInt()
+            binding.imgMediaIcon.setPadding(pad, pad, pad, pad)
+            binding.imgMediaIcon.imageTintList = ColorStateList.valueOf(androidx.core.content.ContextCompat.getColor(binding.root.context, R.color.accent_cyan))
+            binding.imgMediaIcon.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
         }
 
         private fun toggleItem(id: String) {

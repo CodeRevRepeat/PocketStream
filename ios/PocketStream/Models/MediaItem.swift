@@ -11,6 +11,7 @@ public struct MediaItem: Codable, Identifiable, Equatable {
     public let videoCodec: String
     public let audioCodec: String
     public let streamPath: String
+    public let thumbnailPath: String
 
     public init(
         id: String,
@@ -22,7 +23,8 @@ public struct MediaItem: Codable, Identifiable, Equatable {
         height: Int = 0,
         videoCodec: String = "",
         audioCodec: String = "",
-        streamPath: String? = nil
+        streamPath: String? = nil,
+        thumbnailPath: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -34,6 +36,7 @@ public struct MediaItem: Codable, Identifiable, Equatable {
         self.videoCodec = videoCodec
         self.audioCodec = audioCodec
         self.streamPath = streamPath ?? "/stream/\(id)"
+        self.thumbnailPath = thumbnailPath ?? "/api/v1/thumbnail/\(id)"
     }
 
     public func toDictionary() -> [String: Any] {
@@ -47,7 +50,8 @@ public struct MediaItem: Codable, Identifiable, Equatable {
             "height": height,
             "videoCodec": videoCodec,
             "audioCodec": audioCodec,
-            "streamPath": streamPath
+            "streamPath": streamPath,
+            "thumbnailPath": thumbnailPath
         ]
     }
 
@@ -63,7 +67,8 @@ public struct MediaItem: Codable, Identifiable, Equatable {
             height: dictionary["height"] as? Int ?? 0,
             videoCodec: dictionary["videoCodec"] as? String ?? "",
             audioCodec: dictionary["audioCodec"] as? String ?? "",
-            streamPath: dictionary["streamPath"] as? String ?? "/stream/\(id)"
+            streamPath: dictionary["streamPath"] as? String ?? "/stream/\(id)",
+            thumbnailPath: dictionary["thumbnailPath"] as? String ?? "/api/v1/thumbnail/\(id)"
         )
     }
 
