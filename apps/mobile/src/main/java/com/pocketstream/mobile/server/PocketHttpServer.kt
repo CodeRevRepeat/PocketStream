@@ -200,63 +200,27 @@ class PocketHttpServer(
             val isAlreadyTranscoded = TranscoderManager.getTranscodedFile(context, media.id) != null
 
             val resJson = JSONObject()
-            if (!compatibility.isCompatible) {
-                // UNSUPPORTED FORMAT: Auto-encode and stream to TV
-                val streamUrl = if (isAlreadyTranscoded) {
-                    "http://$ip:$listeningPort/stream/transcoded/${media.id}"
-                } else {
-                    // Start hardware transcode immediately on phone
-                    TranscoderManager.startLiveTranscode(
-                        context = context,
-                        media = media,
-                        onReadyToStream = {},
-                        onCompleted = {}
-                    )
-                    "http://$ip:$listeningPort/stream/live/${media.id}"
-                }
+            // Selecting from TV triggers Direct Play
+            val streamUrl = "http://$ip:$listeningPort/stream/${media.id}"
+            val notifMsg = "Direct stream started."
 
-                val notifMsg = "Encoding using phone and started the stream"
-                ServerService.updateNotification(
-                    "PocketStream Streaming",
-                    notifMsg
-                )
+            ServerService.updateNotification(
+                "PocketStream Streaming",
+                notifMsg
+            )
 
-                mainHandler.post {
-                    android.widget.Toast.makeText(context, notifMsg, android.widget.Toast.LENGTH_LONG).show()
-                }
-
-                MainActivity.instance?.onTvPlaybackStarted(media.id, "[Converted] ${media.title}", media.durationMs)
-
-                resJson.put("status", "ok")
-                resJson.put("mode", "transcode")
-                resJson.put("streamUrl", streamUrl)
-                resJson.put("title", "[Converted] ${media.title}")
-                resJson.put("durationMs", media.durationMs)
-                resJson.put("message", notifMsg)
-
-            } else {
-                // SUPPORTED FORMAT: Automatically direct play
-                val streamUrl = "http://$ip:$listeningPort/stream/${media.id}"
-                val notifMsg = "Direct stream started."
-
-                ServerService.updateNotification(
-                    "PocketStream Streaming",
-                    notifMsg
-                )
-
-                mainHandler.post {
-                    android.widget.Toast.makeText(context, notifMsg, android.widget.Toast.LENGTH_SHORT).show()
-                }
-
-                MainActivity.instance?.onTvPlaybackStarted(media.id, media.title, media.durationMs)
-
-                resJson.put("status", "ok")
-                resJson.put("mode", "direct")
-                resJson.put("streamUrl", streamUrl)
-                resJson.put("title", media.title)
-                resJson.put("durationMs", media.durationMs)
-                resJson.put("message", notifMsg)
+            mainHandler.post {
+                android.widget.Toast.makeText(context, notifMsg, android.widget.Toast.LENGTH_SHORT).show()
             }
+
+            MainActivity.instance?.onTvPlaybackStarted(media.id, media.title, media.durationMs)
+
+            resJson.put("status", "ok")
+            resJson.put("mode", "direct")
+            resJson.put("streamUrl", streamUrl)
+            resJson.put("title", media.title)
+            resJson.put("durationMs", media.durationMs)
+            resJson.put("message", notifMsg)
 
             newFixedLengthResponse(Response.Status.OK, "application/json", resJson.toString())
         } catch (e: Exception) {

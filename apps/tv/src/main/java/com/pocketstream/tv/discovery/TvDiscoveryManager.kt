@@ -28,6 +28,21 @@ class TvDiscoveryManager(
 ) {
     companion object {
         private const val TAG = "TvDiscoveryManager"
+
+        fun cleanIp(ip: String?): String {
+            if (ip == null) return ""
+            var cleaned = ip.trim()
+            if (cleaned.startsWith("/")) cleaned = cleaned.substring(1)
+            if (cleaned.startsWith("::ffff:")) cleaned = cleaned.removePrefix("::ffff:")
+            return cleaned
+        }
+
+        fun isSameIp(ip1: String?, ip2: String?): Boolean {
+            val c1 = cleanIp(ip1)
+            val c2 = cleanIp(ip2)
+            if (c1.isEmpty() || c2.isEmpty()) return true
+            return c1.equals(c2, ignoreCase = true)
+        }
     }
 
     private val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager
@@ -152,7 +167,7 @@ class TvDiscoveryManager(
                                 val host = serviceInfo.host?.hostAddress ?: return
                                 val port = serviceInfo.port
                                 val currentConnected = getConnectedPhoneIp()
-                                if (!currentConnected.isNullOrEmpty() && currentConnected != host) {
+                                if (!currentConnected.isNullOrEmpty() && !isSameIp(currentConnected, host)) {
                                     Log.d(TAG, "NSD ignoring discovery from $host: already paired with $currentConnected")
                                     return
                                 }
@@ -210,7 +225,7 @@ class TvDiscoveryManager(
                         if (type == "PHONE_DISCONNECT") {
                             val phoneIp = json.optString("phoneIp", senderIp).ifEmpty { senderIp }
                             val currentConnected = getConnectedPhoneIp()
-                            if (currentConnected.isNullOrEmpty() || currentConnected == phoneIp || currentConnected == senderIp) {
+                            if (currentConnected.isNullOrEmpty() || isSameIp(currentConnected, phoneIp) || isSameIp(currentConnected, senderIp)) {
                                 Log.i(TAG, "UDP Phone announced disconnect: $msg")
                                 onPhoneDisconnected()
                             } else {
@@ -222,7 +237,7 @@ class TvDiscoveryManager(
                             val name = json.optString("deviceName", "PocketStream Phone")
 
                             val currentConnected = getConnectedPhoneIp()
-                            if (!currentConnected.isNullOrEmpty() && currentConnected != phoneIp) {
+                            if (!currentConnected.isNullOrEmpty() && !isSameIp(currentConnected, phoneIp)) {
                                 Log.d(TAG, "Ignoring UDP discovery from $phoneIp: already paired with $currentConnected")
                                 val tvDeviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim().ifEmpty { "Android TV" }
                                 val replyJson = JSONObject().apply {

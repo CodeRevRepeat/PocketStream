@@ -155,8 +155,8 @@ class ServerService : Service() {
             val prefs = getSharedPreferences("pocketstream_mobile_prefs", Context.MODE_PRIVATE)
             val tvIp = prefs.getString("last_tv_ip", "") ?: ""
             val tvPort = prefs.getInt("last_tv_port", 8085)
-            if (tvIp.isNotEmpty()) {
-                Thread {
+            Thread {
+                if (tvIp.isNotEmpty()) {
                     try {
                         val body = "{}".toRequestBody("application/json".toMediaType())
                         val req = okhttp3.Request.Builder()
@@ -164,10 +164,21 @@ class ServerService : Service() {
                             .post(body)
                             .build()
                         disconnectClient.newCall(req).execute().close()
-                    } catch (_: Exception) {
+                    } catch (_: Exception) {}
+                }
+                try {
+                    val socket = java.net.DatagramSocket().apply { broadcast = true }
+                    val myIp = NetworkUtils.getLocalWifiIpAddress()
+                    val json = org.json.JSONObject().apply {
+                        put("type", "PHONE_DISCONNECT")
+                        put("phoneIp", myIp)
                     }
-                }.start()
-            }
+                    val bytes = json.toString().toByteArray(Charsets.UTF_8)
+                    val packet = java.net.DatagramPacket(bytes, bytes.size, java.net.InetAddress.getByName("255.255.255.255"), 8086)
+                    socket.send(packet)
+                    socket.close()
+                } catch (_: Exception) {}
+            }.start()
         } catch (_: Exception) {}
     }
 

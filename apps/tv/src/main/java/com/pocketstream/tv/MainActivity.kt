@@ -151,6 +151,12 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // Selecting from TV always triggers direct play
+        val directStreamUrl = "$phoneBaseUrl${item.streamPath}"
+        Toast.makeText(this@MainActivity, "Direct stream started.", Toast.LENGTH_SHORT).show()
+        startPlayback(directStreamUrl, item.title, item.durationMs)
+
+        // Notify phone in background that TV started playing this item
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val json = JSONObject().apply {
@@ -161,38 +167,8 @@ class MainActivity : AppCompatActivity() {
                     .url("$phoneBaseUrl/api/v1/play")
                     .post(body)
                     .build()
-
-                val res = httpClient.newCall(req).execute()
-                if (res.isSuccessful) {
-                    val resStr = res.body?.string() ?: "{}"
-                    res.close()
-                    val resJson = JSONObject(resStr)
-                    val streamUrl = resJson.getString("streamUrl")
-                    val title = resJson.optString("title", item.title)
-                    val durationMs = resJson.optLong("durationMs", item.durationMs)
-                    val message = resJson.optString("message", "")
-
-                    withContext(Dispatchers.Main) {
-                        if (message.isNotEmpty()) {
-                            Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
-                        }
-                        startPlayback(streamUrl, title, durationMs)
-                    }
-                } else {
-                    res.close()
-                    withContext(Dispatchers.Main) {
-                        val streamUrl = "$phoneBaseUrl${item.streamPath}"
-                        Toast.makeText(this@MainActivity, "Direct stream started.", Toast.LENGTH_SHORT).show()
-                        startPlayback(streamUrl, item.title, item.durationMs)
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    val streamUrl = "$phoneBaseUrl${item.streamPath}"
-                    Toast.makeText(this@MainActivity, "Direct stream started.", Toast.LENGTH_SHORT).show()
-                    startPlayback(streamUrl, item.title, item.durationMs)
-                }
-            }
+                httpClient.newCall(req).execute().close()
+            } catch (_: Exception) {}
         }
     }
 
@@ -759,18 +735,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onPhoneDisconnected() {
-        if (isPlaying || binding.layoutPlayer.visibility == View.VISIBLE) {
-            return
-        }
         phoneBaseUrl = ""
         connectedPhoneName = ""
+        getSharedPreferences("pocketstream_tv_prefs", MODE_PRIVATE).edit()
+            .remove("last_phone_ip")
+            .remove("last_phone_port")
+            .remove("last_phone_name")
+            .apply()
+
         updatePhoneConnectionUi(false, "Phone disconnected")
         binding.tvTvEmptyNotice.text = "Phone disconnected. Please start the media server on your phone."
         binding.tvTvEmptyNotice.visibility = View.VISIBLE
         binding.rvTvMediaList.visibility = View.GONE
         adapter.updateList(emptyList())
 
-        if (binding.layoutPlayer.visibility == View.VISIBLE) {
+        if (binding.layoutPlayer.visibility == View.VISIBLE || isPlaying) {
             stopPlayback()
         }
         Toast.makeText(this@MainActivity, "Phone disconnected", Toast.LENGTH_SHORT).show()

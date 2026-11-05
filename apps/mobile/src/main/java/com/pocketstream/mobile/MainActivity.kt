@@ -1178,13 +1178,14 @@ class MainActivity : AppCompatActivity() {
         val targetIp = resolvedTvIp()
         val targetPort = connectedTvPort
         if (targetIp.isNotEmpty()) {
-            try {
-                val req = Request.Builder()
-                    .url("http://$targetIp:$targetPort/disconnect")
-                    .post("{}".toRequestBody("application/json".toMediaType()))
-                    .build()
-                httpClient.newCall(req).execute().close()
-            } catch (_: Exception) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val req = Request.Builder()
+                        .url("http://$targetIp:$targetPort/disconnect")
+                        .post("{}".toRequestBody("application/json".toMediaType()))
+                        .build()
+                    httpClient.newCall(req).execute().close()
+                } catch (_: Exception) {}
             }
         }
     }

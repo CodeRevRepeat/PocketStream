@@ -18,6 +18,21 @@ class TvReceiverServer(
 
     companion object {
         private const val TAG = "TvReceiverServer"
+
+        fun cleanIp(ip: String?): String {
+            if (ip == null) return ""
+            var cleaned = ip.trim()
+            if (cleaned.startsWith("/")) cleaned = cleaned.substring(1)
+            if (cleaned.startsWith("::ffff:")) cleaned = cleaned.removePrefix("::ffff:")
+            return cleaned
+        }
+
+        fun isSameIp(ip1: String?, ip2: String?): Boolean {
+            val c1 = cleanIp(ip1)
+            val c2 = cleanIp(ip2)
+            if (c1.isEmpty() || c2.isEmpty()) return true
+            return c1.equals(c2, ignoreCase = true)
+        }
     }
 
     private fun addCorsHeaders(res: Response): Response {
@@ -48,7 +63,7 @@ class TvReceiverServer(
                     val deviceName = json.optString("deviceName", "PocketStream Phone")
 
                     val currentConnected = getConnectedPhoneIp()
-                    if (!currentConnected.isNullOrEmpty() && currentConnected != phoneIp) {
+                    if (!currentConnected.isNullOrEmpty() && !isSameIp(currentConnected, phoneIp)) {
                         Log.w(TAG, "Rejecting /pair from $phoneIp: TV is already connected to $currentConnected")
                         val conflictJson = JSONObject().apply {
                             put("status", "busy")
@@ -79,7 +94,7 @@ class TvReceiverServer(
             uri == "/disconnect" && method == Method.POST -> {
                 val currentConnected = getConnectedPhoneIp()
                 val clientIp = session.remoteIpAddress
-                if (currentConnected.isNullOrEmpty() || currentConnected == clientIp) {
+                if (currentConnected.isNullOrEmpty() || isSameIp(currentConnected, clientIp)) {
                     Log.i(TAG, "Received disconnect request from phone ($clientIp)")
                     onDisconnectRequested()
                     newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"disconnected\"}")
@@ -98,7 +113,7 @@ class TvReceiverServer(
             uri == "/play" && method == Method.POST -> {
                 val currentConnected = getConnectedPhoneIp()
                 val clientIp = session.remoteIpAddress
-                if (!currentConnected.isNullOrEmpty() && currentConnected != clientIp) {
+                if (!currentConnected.isNullOrEmpty() && !isSameIp(currentConnected, clientIp)) {
                     Log.w(TAG, "Rejecting /play from unauthorized device ($clientIp vs $currentConnected)")
                     val conflictJson = JSONObject().apply {
                         put("status", "busy")
@@ -125,7 +140,7 @@ class TvReceiverServer(
             uri == "/control" && method == Method.POST -> {
                 val currentConnected = getConnectedPhoneIp()
                 val clientIp = session.remoteIpAddress
-                if (!currentConnected.isNullOrEmpty() && currentConnected != clientIp) {
+                if (!currentConnected.isNullOrEmpty() && !isSameIp(currentConnected, clientIp)) {
                     Log.w(TAG, "Rejecting /control from unauthorized device ($clientIp vs $currentConnected)")
                     return addCorsHeaders(newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json", "{\"status\":\"forbidden\"}"))
                 }
