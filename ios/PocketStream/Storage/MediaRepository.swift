@@ -151,7 +151,7 @@ public class MediaRepository: ObservableObject {
         let totalSeconds = CMTimeGetSeconds(asset.duration)
         let targetSec: Double
         if totalSeconds > 6.0 {
-            targetSec = max(3.0, totalSeconds * 0.10)
+            targetSec = max(2.0, totalSeconds * 0.07)
         } else if totalSeconds > 0 {
             targetSec = totalSeconds / 2.0
         } else {

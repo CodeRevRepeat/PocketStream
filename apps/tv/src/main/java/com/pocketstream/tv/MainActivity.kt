@@ -8,6 +8,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.pocketstream.protocol.MediaItem
 import com.pocketstream.tv.databinding.ActivityMainBinding
@@ -141,7 +142,7 @@ class MainActivity : AppCompatActivity() {
         adapter = TvMediaAdapter(emptyList()) { item ->
             requestPlaybackFromPhone(item)
         }
-        binding.rvTvMediaList.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.rvTvMediaList.layoutManager = GridLayoutManager(this, 4)
         binding.rvTvMediaList.adapter = adapter
     }
 

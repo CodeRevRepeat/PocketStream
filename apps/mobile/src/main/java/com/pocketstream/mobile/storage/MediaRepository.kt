@@ -45,6 +45,11 @@ object MediaRepository {
 
     suspend fun init(context: Context) = withContext(Dispatchers.IO) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val thumbVer = prefs.getInt("thumb_percent_ver", 0)
+        if (thumbVer < 7) {
+            java.io.File(context.filesDir, "thumbnails").deleteRecursively()
+            prefs.edit().putInt("thumb_percent_ver", 7).apply()
+        }
         val savedTrees = prefs.getStringSet(KEY_PERSISTED_TREES, emptySet()) ?: emptySet()
         val savedFiles = prefs.getStringSet(KEY_PERSISTED_FILES, emptySet()) ?: emptySet()
         val savedExcludes = prefs.getStringSet(KEY_EXCLUDED_IDS, emptySet()) ?: emptySet()
@@ -154,7 +159,7 @@ object MediaRepository {
             val durationMs = media.durationMs.takeIf { it > 0 }
                 ?: (mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L)
             val targetMs = if (durationMs > 6000L) {
-                (durationMs * 0.10).toLong().coerceAtLeast(3000L)
+                (durationMs * 0.07).toLong().coerceAtLeast(2000L)
             } else if (durationMs > 0L) {
                 durationMs / 2
             } else {
@@ -317,12 +322,12 @@ object MediaRepository {
                 }
             }
 
-            // Extract thumbnail at 10% timeline position
+            // Extract thumbnail at 7% timeline position
             val thumbFile = getThumbnailFile(context, id)
             if (!thumbFile.exists() || thumbFile.length() == 0L) {
                 try {
                     val targetMs = if (durationMs > 6000L) {
-                        (durationMs * 0.10).toLong().coerceAtLeast(3000L)
+                        (durationMs * 0.07).toLong().coerceAtLeast(2000L)
                     } else if (durationMs > 0L) {
                         durationMs / 2
                     } else {
