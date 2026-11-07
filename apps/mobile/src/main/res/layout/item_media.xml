@@ -70,16 +70,16 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnStreamToTv"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
             android:layout_width="wrap_content"
             android:layout_height="36dp"
             android:layout_marginStart="8dp"
             android:text="Stream to TV"
             android:textAllCaps="false"
             android:textSize="12sp"
-            android:textColor="@color/accent_cyan"
-            app:strokeColor="@color/accent_cyan"
-            app:strokeWidth="1.2dp"
+            android:textColor="@android:color/white"
+            app:strokeColor="@android:color/transparent"
+            app:strokeWidth="0dp"
             app:cornerRadius="18dp" />
 
     </LinearLayout>

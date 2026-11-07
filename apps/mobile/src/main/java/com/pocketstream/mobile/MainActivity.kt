@@ -43,6 +43,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
@@ -65,8 +66,8 @@ class MainActivity : AppCompatActivity() {
     private var tvCurrentPosMs = 0L
     private var tvTotalDurationMs = 0L
     private var isUserTrackingScrubber = false
-    private var activeStreamingMediaId: String? = null
-    private var activeStreamingMediaTitle: String = ""
+    var activeStreamingMediaId: String? = null
+    var activeStreamingMediaTitle: String = ""
     private var activeStreamingDurationMs: Long = 0L
     private var statusSyncJob: Job? = null
     private var preparingDialog: AlertDialog? = null
@@ -75,11 +76,16 @@ class MainActivity : AppCompatActivity() {
     private var connectedTvIp: String = ""
     private var connectedTvPort: Int = 8085
     private var connectedTvName: String = "Android TV"
+    private var connectedTvSessionId: String = ""
+    private var connectedTvSessionKey: String = ""
     private var tvCapabilities: TvCapabilities = TvCapabilities.DEFAULT_1080P
     private var discoveryManager: MobileDiscoveryManager? = null
+    private var isTvPaired: Boolean = false
 
     private val prefs by lazy { getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE) }
-    private fun resolvedTvIp(): String = connectedTvIp.ifEmpty { prefs.getString("last_tv_ip", "") ?: "" }
+    fun resolvedTvIp(): String = connectedTvIp.ifEmpty { prefs.getString("last_tv_ip", "") ?: "" }
+    private fun resolvedTvSessionKey(): String = connectedTvSessionKey.ifEmpty { prefs.getString("last_tv_key", "") ?: "" }
+    private fun resolvedTvSessionId(): String = connectedTvSessionId.ifEmpty { prefs.getString("last_tv_sid", "") ?: "" }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -128,6 +134,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var statusBarHeightPx: Int = 0
+    private var navBarHeightPx: Int = 0
+    private var periodicTvPollJob: Job? = null
 
     private fun getStatusBarHeight(): Int {
         if (statusBarHeightPx > 0) return statusBarHeightPx
@@ -147,8 +155,16 @@ class MainActivity : AppCompatActivity() {
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.rootContainer) { _, insets ->
             val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            if (sysBars.top > 0) {
+            var changed = false
+            if (sysBars.top > 0 && sysBars.top != statusBarHeightPx) {
                 statusBarHeightPx = sysBars.top
+                changed = true
+            }
+            if (sysBars.bottom != navBarHeightPx) {
+                navBarHeightPx = sysBars.bottom
+                changed = true
+            }
+            if (changed) {
                 updateLayoutForOrientation(resources.configuration.orientation)
             }
             insets
@@ -185,12 +201,14 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {}
         }
 
-        if (!savedTvIp.isNullOrEmpty()) {
+        val hasSavedKey = resolvedTvSessionKey().isNotEmpty()
+        if (!savedTvIp.isNullOrEmpty() && hasSavedKey) {
             connectedTvIp = savedTvIp
             connectedTvPort = savedTvPort
             connectedTvName = savedTvName
             updateTvTargetUI(connectedTvIp, connectedTvPort, connectedTvName, isPaired = true)
             fetchTvCapabilities(connectedTvIp, connectedTvPort)
+            sendPairHandshake(connectedTvIp, connectedTvPort)
             syncTvPlaybackStatus()
         } else {
             updateTvTargetUI("", 8085, "", isPaired = false)
@@ -218,10 +236,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Auto-start server in background with smooth feedback
-        if (!ServerService.isServerRunning) {
-            toggleServerWithSpinner(start = true)
-        }
         handleDebugIntent(intent)
     }
 
@@ -248,9 +262,11 @@ class MainActivity : AppCompatActivity() {
 
         val statusBarTop = getStatusBarHeight()
         val extraTopMargin = dp(8)
+        val navBarBottom = navBarHeightPx
 
         if (isLandscape) {
-            binding.rootContainer.setPadding(dp(12), dp(6), dp(12), dp(6))
+            val bottomPad = navBarBottom + dp(8)
+            binding.rootContainer.setPadding(dp(12), dp(6), dp(12), bottomPad)
             binding.mainContentLayout.orientation = LinearLayout.HORIZONTAL
 
             val leftParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.0f).apply {
@@ -266,11 +282,12 @@ class MainActivity : AppCompatActivity() {
             binding.layoutNowPlayingInner.setPadding(dp(12), dp(6), dp(12), dp(6))
             (binding.cardNowPlaying.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
                 lp.topMargin = dp(4)
-                lp.bottomMargin = 0
+                lp.bottomMargin = dp(4)
                 binding.cardNowPlaying.layoutParams = lp
             }
         } else {
-            binding.rootContainer.setPadding(dp(16), statusBarTop + extraTopMargin, dp(16), dp(12))
+            val bottomPad = navBarBottom + dp(18)
+            binding.rootContainer.setPadding(dp(16), statusBarTop + extraTopMargin, dp(16), bottomPad)
             binding.mainContentLayout.orientation = LinearLayout.VERTICAL
 
             val leftParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 0f).apply {
@@ -286,7 +303,7 @@ class MainActivity : AppCompatActivity() {
             binding.layoutNowPlayingInner.setPadding(dp(14), dp(12), dp(14), dp(12))
             (binding.cardNowPlaying.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
                 lp.topMargin = dp(6)
-                lp.bottomMargin = dp(2)
+                lp.bottomMargin = dp(8)
                 binding.cardNowPlaying.layoutParams = lp
             }
         }
@@ -306,18 +323,72 @@ class MainActivity : AppCompatActivity() {
                     val isPlaying = json.optBoolean("isPlaying", false)
                     val pos = json.optLong("positionMs", 0L)
                     val len = json.optLong("durationMs", 0L)
-                    if (isPlaying || pos > 0L) {
+                    val statusTitle = json.optString("title", "")
+                    val streamUrl = json.optString("streamUrl", "")
+                    val isPhoneConnected = json.optBoolean("isPhoneConnected", true)
+                    val connectedPhoneIp = json.optString("connectedPhoneIp", "")
+                    val localIp = NetworkUtils.getLocalWifiIpAddress()
+
+                    val tvSessionId = json.optString("sessionId", "")
+                    if (connectedTvSessionId.isNotEmpty() && tvSessionId.isNotEmpty() && tvSessionId != connectedTvSessionId) {
+                        android.util.Log.w("MainActivity", "TV session ID changed ($connectedTvSessionId -> $tvSessionId), TV disconnected")
+                        withContext(Dispatchers.Main) {
+                            onTvExplicitlyDisconnected()
+                        }
+                        return@launch
+                    }
+
+                    if (connectedPhoneIp.isNotEmpty() && !isSameIp(connectedPhoneIp, localIp)) {
+                        android.util.Log.w("MainActivity", "Another phone ($connectedPhoneIp) is connected to TV, disconnecting")
+                        withContext(Dispatchers.Main) {
+                            onTvExplicitlyDisconnected()
+                        }
+                        return@launch
+                    }
+                    if (isPlaying || (pos > 0L && streamUrl.isNotEmpty() && statusTitle.isNotEmpty())) {
                         withContext(Dispatchers.Main) {
                             tvIsPlaying = isPlaying
                             tvCurrentPosMs = pos
                             if (len > 0L) tvTotalDurationMs = len
-                            val title = activeStreamingMediaTitle.ifEmpty { "TV Stream" }
-                            showNowPlaying(title, len)
+                            val displayTitle = if (statusTitle.isNotEmpty()) statusTitle else activeStreamingMediaTitle.ifEmpty { "TV Stream" }
+                            if (activeStreamingMediaId == null) {
+                                val match = MediaRepository.getAllMediaItems().firstOrNull {
+                                    it.title == displayTitle || (streamUrl.isNotEmpty() && streamUrl.contains(it.id))
+                                }
+                                if (match != null) {
+                                    activeStreamingMediaId = match.id
+                                    adapter.setActiveStreamingId(match.id)
+                                }
+                            }
+                            showNowPlaying(displayTitle, len)
+                            if (!isUserTrackingScrubber && tvTotalDurationMs > 0) {
+                                val progress = ((pos.toDouble() / tvTotalDurationMs.toDouble()) * 1000).toInt()
+                                binding.sbRemoteScrubber.progress = progress
+                                val posStr = formatTime(pos)
+                                val lenStr = formatTime(tvTotalDurationMs)
+                                binding.tvNowPlayingTime.text = "$posStr / $lenStr"
+                            }
+                        }
+                    } else if (activeStreamingMediaId != null) {
+                        withContext(Dispatchers.Main) {
+                            hideNowPlaying()
                         }
                     }
                 }
                 res.close()
             } catch (_: Exception) {}
+        }
+    }
+
+    private fun startPeriodicTvPoll() {
+        periodicTvPollJob?.cancel()
+        periodicTvPollJob = lifecycleScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                if (resolvedTvIp().isNotEmpty() && activeStreamingMediaId == null) {
+                    syncTvPlaybackStatus()
+                }
+                kotlinx.coroutines.delay(2500)
+            }
         }
     }
 
@@ -343,9 +414,20 @@ class MainActivity : AppCompatActivity() {
         val action = intent?.getStringExtra("action") ?: return
         lifecycleScope.launch(Dispatchers.Main) {
             when (action) {
+                "pair_qr" -> {
+                    val qr = intent.getStringExtra("qr")
+                    if (!qr.isNullOrEmpty()) {
+                        handleScannedQr(qr)
+                    }
+                }
                 "stop_server" -> {
                     if (ServerService.isServerRunning) {
                         toggleServerWithSpinner(start = false)
+                    }
+                }
+                "start_server" -> {
+                    if (!ServerService.isServerRunning) {
+                        toggleServerWithSpinner(start = true)
                     }
                 }
                 "click_stream" -> {
@@ -398,29 +480,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupListeners() {
         binding.btnScanTvQr.setOnClickListener {
-            if (!ServerService.isServerRunning) {
-                AlertDialog.Builder(this)
-                    .setTitle("Media Server Required")
-                    .setMessage("The Media Server must be running before pairing with your TV.\n\nPlease start the Media Server first.")
-                    .setPositiveButton("Start & Scan") { _, _ ->
-                        toggleServerWithSpinner(start = true) {
-                            val options = ScanOptions().apply {
-                                setPrompt("Scan the QR code displayed on your TV")
-                                setBeepEnabled(true)
-                                setOrientationLocked(false)
-                                setBarcodeImageEnabled(false)
-                            }
-                            qrScannerLauncher.launch(options)
-                        }
-                    }
-                    .setNeutralButton("Start Server Only") { _, _ ->
-                        toggleServerWithSpinner(start = true)
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-                return@setOnClickListener
-            }
-
             val options = ScanOptions().apply {
                 setPrompt("Scan the QR code displayed on your TV")
                 setBeepEnabled(true)
@@ -431,6 +490,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnToggleServer.setOnClickListener {
+            if (!isTvPaired && !ServerService.isServerRunning) {
+                Toast.makeText(this, "Please pair with TV first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             val shouldStart = !ServerService.isServerRunning
             toggleServerWithSpinner(start = shouldStart)
         }
@@ -474,6 +537,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Phase 3: Now Playing Remote Control listeners
+        binding.btnRemotePlayPause.setTextColor(android.graphics.Color.BLACK)
         binding.btnRemotePlayPause.setOnClickListener {
             sendTvControl(if (tvIsPlaying) "PAUSE" else "PLAY")
         }
@@ -568,9 +632,10 @@ class MainActivity : AppCompatActivity() {
                 var isReady = false
                 var attempts = 0
                 while (!isReady && attempts < 25) {
+                    val port = ServerService.serverPort
                     try {
                         val testReq = Request.Builder()
-                            .url("http://127.0.0.1:8080/api/v1/library")
+                            .url("http://127.0.0.1:$port/api/v1/library")
                             .get()
                             .build()
                         val res = httpClient.newCall(testReq).execute()
@@ -586,9 +651,8 @@ class MainActivity : AppCompatActivity() {
 
                 discoveryManager?.broadcastDiscoverTv()
                 val targetIp = resolvedTvIp()
-                if (targetIp.isNotEmpty()) {
+                if (targetIp.isNotEmpty() && resolvedTvSessionKey().isNotEmpty()) {
                     sendPairHandshake(targetIp, connectedTvPort)
-                    delay(400)
                     notifyTvLibraryUpdated()
                 }
             } else {
@@ -602,7 +666,18 @@ class MainActivity : AppCompatActivity() {
                     adapter.setActiveStreamingId(null)
                 }
                 TranscoderManager.purgeAllCache(applicationContext)
-                sendTvControl("STOP")
+                try {
+                    val targetIp = resolvedTvIp()
+                    if (targetIp.isNotEmpty()) {
+                        val stopJson = JSONObject().apply {
+                            put("action", "STOP")
+                            put("positionMs", 0L)
+                        }
+                        val stopBodyStr = stopJson.toString()
+                        val stopReq = buildAuthenticatedTvRequest("http://$targetIp:$connectedTvPort/control", "POST", stopBodyStr.toRequestBody("application/json".toMediaType()), stopBodyStr)
+                        httpClient.newCall(stopReq).execute().close()
+                    }
+                } catch (_: Exception) {}
                 notifyTvDisconnected()
                 discoveryManager?.broadcastPhoneDisconnect()
                 ServerService.stop(applicationContext)
@@ -620,18 +695,28 @@ class MainActivity : AppCompatActivity() {
     private fun updateServerUI() {
         val isRunning = ServerService.isServerRunning
         val localIp = NetworkUtils.getLocalWifiIpAddress()
-        val url = "http://$localIp:8080"
+        val url = "http://$localIp:${ServerService.serverPort}"
 
         if (isRunning) {
             binding.tvStatusBadge.text = "RUNNING"
             binding.tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+            binding.btnToggleServer.isEnabled = true
+            binding.btnToggleServer.alpha = 1.0f
             binding.btnToggleServer.text = "Stop"
             binding.tvServerAddress.text = url
         } else {
             binding.tvStatusBadge.text = "STOPPED"
             binding.tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
             binding.btnToggleServer.text = "Start"
-            binding.tvServerAddress.text = "Server offline"
+            if (isTvPaired) {
+                binding.btnToggleServer.isEnabled = true
+                binding.btnToggleServer.alpha = 1.0f
+                binding.tvServerAddress.text = "Server offline"
+            } else {
+                binding.btnToggleServer.isEnabled = false
+                binding.btnToggleServer.alpha = 0.5f
+                binding.tvServerAddress.text = "Pair with TV to start server"
+            }
         }
     }
 
@@ -682,7 +767,7 @@ class MainActivity : AppCompatActivity() {
 
         val isAlreadyTranscoded = TranscoderManager.getTranscodedFile(this, localMedia.id) != null
         if (isAlreadyTranscoded) {
-            val transcodedUrl = "http://$localIp:8080/stream/transcoded/${localMedia.id}"
+            val transcodedUrl = "http://$localIp:${ServerService.serverPort}/stream/transcoded/${localMedia.id}"
             sendStreamToTv(transcodedUrl, "[Converted] ${localMedia.title}", localMedia.id, localMedia.durationMs)
             return
         }
@@ -708,7 +793,7 @@ class MainActivity : AppCompatActivity() {
     private fun showIncompatibleFormatDialog(media: LocalMedia, localIp: String, reasons: List<String>) {
         val isAlreadyTranscoded = TranscoderManager.getTranscodedFile(this, media.id) != null
         if (isAlreadyTranscoded) {
-            val transcodedUrl = "http://$localIp:8080/stream/transcoded/${media.id}"
+            val transcodedUrl = "http://$localIp:${ServerService.serverPort}/stream/transcoded/${media.id}"
             sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, media.durationMs)
             return
         }
@@ -746,7 +831,7 @@ class MainActivity : AppCompatActivity() {
 
         btnPrimary.setOnClickListener {
             dialog.dismiss()
-            val directUrl = "http://$localIp:8080/stream/${media.id}"
+            val directUrl = "http://$localIp:${ServerService.serverPort}/stream/${media.id}"
             sendStreamToTv(directUrl, media.title, media.id, media.durationMs)
         }
 
@@ -785,7 +870,7 @@ class MainActivity : AppCompatActivity() {
         if (startPositionMs == 0L) {
             val existing = TranscoderManager.getTranscodedFile(this, media.id)
             if (existing != null) {
-                val transcodedUrl = "http://$localIp:8080/stream/transcoded/${media.id}"
+                val transcodedUrl = "http://$localIp:${ServerService.serverPort}/stream/transcoded/${media.id}"
                 sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, duration)
                 return
             }
@@ -796,7 +881,7 @@ class MainActivity : AppCompatActivity() {
             sendTvControl("PREPARING_SEEK", startPositionMs)
         }
 
-        val liveUrl = "http://$localIp:8080/stream/live/${media.id}?t=${System.currentTimeMillis()}"
+        val liveUrl = "http://$localIp:${ServerService.serverPort}/stream/live/${media.id}?t=${System.currentTimeMillis()}"
 
         // Custom Preparing Dialog with 30s Countdown and Live Transcoding Progress
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_preparing_stream, null)
@@ -846,7 +931,7 @@ class MainActivity : AppCompatActivity() {
                 // If TV is currently streaming this media from 0, switch TV to the progressive seekable MP4!
                 if (startPositionMs == 0L && activeStreamingMediaId == media.id) {
                     val currentPos = tvCurrentPosMs
-                    val transcodedUrl = "http://$localIp:8080/stream/transcoded/${media.id}"
+                    val transcodedUrl = "http://$localIp:${ServerService.serverPort}/stream/transcoded/${media.id}"
                     sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, duration, startPositionMs = currentPos)
                 }
             },
@@ -875,7 +960,7 @@ class MainActivity : AppCompatActivity() {
                 dialog.dismiss()
                 val readyFile = if (startPositionMs == 0L) TranscoderManager.getTranscodedFile(this@MainActivity, media.id) else null
                 val urlToSend = if (readyFile != null) {
-                    "http://$localIp:8080/stream/transcoded/${media.id}"
+                    "http://$localIp:${ServerService.serverPort}/stream/transcoded/${media.id}"
                 } else {
                     liveUrl
                 }
@@ -887,7 +972,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showStandardStreamDialog(item: MediaItem, localIp: String) {
         val localMedia = MediaRepository.getMediaById(item.id)
-        val streamUrl = "http://$localIp:8080${item.streamPath}"
+        val streamUrl = "http://$localIp:${ServerService.serverPort}${item.streamPath}"
         val targetLabel = if (connectedTvIp.isNotEmpty()) "$connectedTvName ($connectedTvIp)" else "TV"
         val options = arrayOf(
             "Direct Play on $targetLabel (Original Quality)",
@@ -954,18 +1039,23 @@ class MainActivity : AppCompatActivity() {
                     put("durationMs", durationMs)
                     put("startPositionMs", startPositionMs)
                 }
-                val body = json.toString().toRequestBody("application/json".toMediaType())
-                val request = Request.Builder().url(tvApiUrl).post(body).build()
+                val bodyStr = json.toString()
+                val body = bodyStr.toRequestBody("application/json".toMediaType())
+                val request = buildAuthenticatedTvRequest(tvApiUrl, "POST", body, bodyStr)
                 val response = httpClient.newCall(request).execute()
 
+                val resCode = response.code
+                val isSuccess = response.isSuccessful
                 withContext(Dispatchers.Main) {
-                    if (response.isSuccessful) {
+                    if (isSuccess) {
                         Toast.makeText(this@MainActivity, "Playing on TV!", Toast.LENGTH_SHORT).show()
                         activeStreamingMediaId = id
                         adapter.setActiveStreamingId(id)
                         showNowPlaying(title, durationMs)
+                    } else if (resCode == 401) {
+                        handleTvSessionExpired()
                     } else {
-                        Toast.makeText(this@MainActivity, "TV replied: ${response.code}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "TV replied: $resCode", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
@@ -1000,11 +1090,17 @@ class MainActivity : AppCompatActivity() {
     private fun startTvStatusSync() {
         statusSyncJob?.cancel()
         statusSyncJob = lifecycleScope.launch(Dispatchers.IO) {
-            val tvIp = resolvedTvIp()
-            if (tvIp.isEmpty()) return@launch
+            var currentTvIp = resolvedTvIp()
+            var retry = 0
+            while (currentTvIp.isEmpty() && retry < 15 && isActive) {
+                kotlinx.coroutines.delay(200)
+                currentTvIp = resolvedTvIp()
+                retry++
+            }
+            if (currentTvIp.isEmpty()) return@launch
 
             val tvPort = connectedTvPort
-            val statusUrl = "http://$tvIp:$tvPort/status"
+            val statusUrl = "http://$currentTvIp:$tvPort/status"
 
             while (isActive) {
                 try {
@@ -1016,6 +1112,28 @@ class MainActivity : AppCompatActivity() {
                         val isPlaying = json.optBoolean("isPlaying", false)
                         val pos = json.optLong("positionMs", 0L)
                         val len = json.optLong("durationMs", 0L)
+                        val statusTitle = json.optString("title", "")
+                        val streamUrl = json.optString("streamUrl", "")
+                        val isPhoneConnected = json.optBoolean("isPhoneConnected", true)
+                        val connectedPhoneIp = json.optString("connectedPhoneIp", "")
+                        val localIp = NetworkUtils.getLocalWifiIpAddress()
+
+                        val tvSessionId = json.optString("sessionId", "")
+                        if (connectedTvSessionId.isNotEmpty() && tvSessionId.isNotEmpty() && tvSessionId != connectedTvSessionId) {
+                            android.util.Log.w("MainActivity", "TV session ID changed ($connectedTvSessionId -> $tvSessionId), TV disconnected")
+                            withContext(Dispatchers.Main) {
+                                onTvExplicitlyDisconnected()
+                            }
+                            return@launch
+                        }
+
+                        if (connectedPhoneIp.isNotEmpty() && !isSameIp(connectedPhoneIp, localIp)) {
+                            android.util.Log.w("MainActivity", "Another phone ($connectedPhoneIp) is connected to TV, disconnecting")
+                            withContext(Dispatchers.Main) {
+                                onTvExplicitlyDisconnected()
+                            }
+                            return@launch
+                        }
 
                         withContext(Dispatchers.Main) {
                             tvIsPlaying = isPlaying
@@ -1024,7 +1142,22 @@ class MainActivity : AppCompatActivity() {
                                 tvTotalDurationMs = len
                             }
 
-                            if (!isPlaying && pos == 0L && len == 0L && activeStreamingMediaId != null) {
+                            if (activeStreamingMediaTitle.isEmpty() && statusTitle.isNotEmpty()) {
+                                activeStreamingMediaTitle = statusTitle
+                                binding.tvNowPlayingTitle.text = statusTitle
+                            }
+                            if (activeStreamingMediaId == null) {
+                                val targetTitle = if (statusTitle.isNotEmpty()) statusTitle else activeStreamingMediaTitle
+                                val match = MediaRepository.getAllMediaItems().firstOrNull {
+                                    it.title == targetTitle || (streamUrl.isNotEmpty() && streamUrl.contains(it.id))
+                                }
+                                if (match != null) {
+                                    activeStreamingMediaId = match.id
+                                    adapter.setActiveStreamingId(match.id)
+                                }
+                            }
+
+                            if (!isPlaying && (pos == 0L || streamUrl.isEmpty() || statusTitle.isEmpty()) && activeStreamingMediaId != null) {
                                 hideNowPlaying()
                             } else {
                                 binding.btnRemotePlayPause.text = if (isPlaying) "Pause" else "Play"
@@ -1048,10 +1181,55 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
+                    response.close()
                 } catch (ignored: Exception) {}
                 kotlinx.coroutines.delay(1000)
             }
         }
+    }
+
+    private fun buildAuthenticatedTvRequest(url: String, method: String, body: RequestBody?, bodyString: String = ""): Request {
+        val builder = Request.Builder().url(url)
+        val key = resolvedTvSessionKey()
+        val sid = resolvedTvSessionId()
+        val effectiveBodyString = if (bodyString.isEmpty() && method == "POST" && body == null) "{}" else bodyString
+        if (key.isNotEmpty()) {
+            val timestamp = System.currentTimeMillis() / 1000L
+            val nonce = com.pocketstream.protocol.AuthProtocol.generateNonce()
+            val path = try { java.net.URI(url).path } catch (_: Exception) { "" }
+            val bodyHash = if (effectiveBodyString.isNotEmpty()) com.pocketstream.protocol.AuthProtocol.sha256Hex(effectiveBodyString) else ""
+            val signature = com.pocketstream.protocol.AuthProtocol.computeSignature(
+                key = key,
+                method = method,
+                path = path,
+                timestamp = timestamp,
+                nonce = nonce,
+                bodyHash = bodyHash
+            )
+            if (sid.isNotEmpty()) {
+                builder.addHeader(com.pocketstream.protocol.AuthProtocol.HEADER_SESSION, sid)
+            }
+            builder.addHeader(com.pocketstream.protocol.AuthProtocol.HEADER_TIMESTAMP, timestamp.toString())
+            builder.addHeader(com.pocketstream.protocol.AuthProtocol.HEADER_NONCE, nonce)
+            builder.addHeader(com.pocketstream.protocol.AuthProtocol.HEADER_SIGNATURE, signature)
+        }
+        if (body != null) {
+            builder.method(method, body)
+        } else if (method == "POST") {
+            builder.post(effectiveBodyString.toRequestBody("application/json".toMediaType()))
+        }
+        return builder.build()
+    }
+
+    private fun handleTvSessionExpired() {
+        connectedTvSessionKey = ""
+        connectedTvSessionId = ""
+        prefs.edit()
+            .remove("last_tv_key")
+            .remove("last_tv_sid")
+            .apply()
+        updateTvTargetUI(connectedTvIp, connectedTvPort, connectedTvName, isPaired = false)
+        Toast.makeText(this@MainActivity, "TV session expired or key mismatch. Please scan TV QR to re-pair.", Toast.LENGTH_LONG).show()
     }
 
     private fun sendTvControl(action: String, positionMs: Long = 0L) {
@@ -1061,15 +1239,38 @@ class MainActivity : AppCompatActivity() {
         val tvPort = connectedTvPort
         val controlUrl = "http://$tvIp:$tvPort/control"
 
+        // Optimistic UI update on phone
+        if (action.equals("PAUSE", ignoreCase = true)) {
+            tvIsPlaying = false
+            binding.btnRemotePlayPause.text = "Play"
+            binding.tvNowPlayingBadge.text = "PAUSED"
+            binding.tvNowPlayingBadge.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
+        } else if (action.equals("PLAY", ignoreCase = true) || action.equals("RESUME", ignoreCase = true)) {
+            tvIsPlaying = true
+            binding.btnRemotePlayPause.text = "Pause"
+            binding.tvNowPlayingBadge.text = "TV PLAYING"
+            binding.tvNowPlayingBadge.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+        }
+
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val json = JSONObject().apply {
                     put("action", action)
                     put("positionMs", positionMs)
                 }
-                val body = json.toString().toRequestBody("application/json".toMediaType())
-                val request = Request.Builder().url(controlUrl).post(body).build()
-                httpClient.newCall(request).execute()
+                val bodyStr = json.toString()
+                val body = bodyStr.toRequestBody("application/json".toMediaType())
+                val request = buildAuthenticatedTvRequest(controlUrl, "POST", body, bodyStr)
+                val response = httpClient.newCall(request).execute()
+                if (response.code == 401) {
+                    withContext(Dispatchers.Main) {
+                        handleTvSessionExpired()
+                    }
+                } else if (response.isSuccessful) {
+                    kotlinx.coroutines.delay(200)
+                    syncTvPlaybackStatus()
+                }
+                response.close()
             } catch (_: Exception) {
             }
         }
@@ -1078,15 +1279,40 @@ class MainActivity : AppCompatActivity() {
     private fun handleScannedQr(contents: String) {
         val tvInfo = TvInfo.fromQrString(contents)
         if (tvInfo != null) {
-            onTvDiscovered(tvInfo.ip, tvInfo.port, tvInfo.name)
+            connectedTvSessionId = tvInfo.sessionId
+            connectedTvSessionKey = tvInfo.sessionKey
+            connectedTvIp = tvInfo.ip
+            connectedTvPort = tvInfo.port
+            connectedTvName = tvInfo.name
+            prefs.edit()
+                .putString("last_tv_sid", tvInfo.sessionId)
+                .putString("last_tv_key", tvInfo.sessionKey)
+                .putString("last_tv_ip", tvInfo.ip)
+                .putInt("last_tv_port", tvInfo.port)
+                .putString("last_tv_name", tvInfo.name)
+                .apply()
             sendPairHandshake(tvInfo.ip, tvInfo.port)
-            Toast.makeText(this, "Paired with ${tvInfo.name}!", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, "Unrecognized QR code", Toast.LENGTH_LONG).show()
         }
     }
 
+    private fun isSameIp(ip1: String?, ip2: String?): Boolean {
+        if (ip1.isNullOrEmpty() || ip2.isNullOrEmpty()) return false
+        val c1 = ip1.trim().removePrefix("/").removePrefix("::ffff:")
+        val c2 = ip2.trim().removePrefix("/").removePrefix("::ffff:")
+        return c1 == c2 || c1 == "127.0.0.1" || c2 == "127.0.0.1"
+    }
+
     private fun onTvDiscovered(tvIp: String, tvPort: Int, tvName: String) {
+        val hasKey = resolvedTvSessionKey().isNotEmpty()
+        val savedIp = prefs.getString("last_tv_ip", null)
+        val isAlreadyPairedWithThisTv = hasKey && !savedIp.isNullOrEmpty() && isSameIp(savedIp, tvIp)
+
+        if (!isAlreadyPairedWithThisTv) {
+            return
+        }
+
         connectedTvIp = tvIp
         connectedTvPort = tvPort
         connectedTvName = tvName
@@ -1107,16 +1333,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateTvTargetUI(tvIp: String, tvPort: Int, tvName: String, isPaired: Boolean) {
-        if (isPaired && tvIp.isNotEmpty()) {
+        isTvPaired = isPaired && tvIp.isNotEmpty()
+        if (isTvPaired) {
             binding.tvTvTargetName.text = tvName
             val formatNotice = if (tvCapabilities.supports4K) "4K" else "1080p Max"
             binding.tvTvTargetStatus.text = "Connected ($tvIp:$tvPort) • $formatNotice"
             binding.tvTvTargetStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+            binding.btnScanTvQr.isEnabled = false
+            binding.btnScanTvQr.alpha = 0.5f
         } else {
             binding.tvTvTargetName.text = "Target TV"
-            binding.tvTvTargetStatus.text = "Searching on Wi-Fi or tap Scan..."
+            binding.tvTvTargetStatus.text = "Scan to pair TV"
             binding.tvTvTargetStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.btnScanTvQr.isEnabled = true
+            binding.btnScanTvQr.alpha = 1.0f
         }
+        updateServerUI()
     }
 
     private fun sendPairHandshake(tvIp: String, tvPort: Int) {
@@ -1124,17 +1356,24 @@ class MainActivity : AppCompatActivity() {
             try {
                 val localIp = NetworkUtils.getLocalWifiIpAddress()
                 val phoneName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim().ifEmpty { "PocketStream Phone" }
+                val key = resolvedTvSessionKey()
                 val json = JSONObject().apply {
                     put("phoneIp", localIp)
-                    put("phonePort", 8080)
+                    put("phonePort", ServerService.serverPort)
                     put("deviceName", "$phoneName / PocketStream")
+                    if (key.isNotEmpty()) {
+                        put("sessionKey", key)
+                    }
                 }
-                val body = json.toString().toRequestBody("application/json".toMediaType())
-                val req = Request.Builder().url("http://$tvIp:$tvPort/pair").post(body).build()
+                val bodyStr = json.toString()
+                val body = bodyStr.toRequestBody("application/json".toMediaType())
+                val req = buildAuthenticatedTvRequest("http://$tvIp:$tvPort/pair", "POST", body, bodyStr)
                 val res = httpClient.newCall(req).execute()
+                val resCode = res.code
+                val isSuccess = res.isSuccessful
                 val resBody = res.body?.string() ?: ""
                 res.close()
-                if (res.isSuccessful && resBody.isNotEmpty()) {
+                if (isSuccess && resBody.isNotEmpty()) {
                     val resJson = JSONObject(resBody)
                     val capsJson = resJson.optJSONObject("capabilities")
                     if (capsJson != null) {
@@ -1145,7 +1384,17 @@ class MainActivity : AppCompatActivity() {
                             .apply()
                         withContext(Dispatchers.Main) {
                             updateTvTargetUI(tvIp, tvPort, connectedTvName, isPaired = true)
+                            Toast.makeText(this@MainActivity, "Paired with $connectedTvName!", Toast.LENGTH_SHORT).show()
+                            if (!ServerService.isServerRunning) {
+                                toggleServerWithSpinner(start = true)
+                            } else {
+                                notifyTvLibraryUpdated()
+                            }
                         }
+                    }
+                } else if (resCode == 401) {
+                    withContext(Dispatchers.Main) {
+                        handleTvSessionExpired()
                     }
                 }
             } catch (_: Exception) {}
@@ -1167,7 +1416,8 @@ class MainActivity : AppCompatActivity() {
                         .putString("last_tv_caps", capsJson.toString())
                         .apply()
                     withContext(Dispatchers.Main) {
-                        updateTvTargetUI(tvIp, tvPort, connectedTvName, isPaired = true)
+                        val currentlyPaired = resolvedTvSessionKey().isNotEmpty() && connectedTvIp == tvIp
+                        updateTvTargetUI(tvIp, tvPort, connectedTvName, isPaired = currentlyPaired)
                     }
                 }
             } catch (_: Exception) {}
@@ -1180,10 +1430,7 @@ class MainActivity : AppCompatActivity() {
         if (targetIp.isNotEmpty()) {
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
-                    val req = Request.Builder()
-                        .url("http://$targetIp:$targetPort/disconnect")
-                        .post("{}".toRequestBody("application/json".toMediaType()))
-                        .build()
+                    val req = buildAuthenticatedTvRequest("http://$targetIp:$targetPort/disconnect", "POST", null)
                     httpClient.newCall(req).execute().close()
                 } catch (_: Exception) {}
             }
@@ -1197,10 +1444,7 @@ class MainActivity : AppCompatActivity() {
         if (targetIp.isNotEmpty()) {
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
-                    val req = Request.Builder()
-                        .url("http://$targetIp:$targetPort/refresh")
-                        .post("{}".toRequestBody("application/json".toMediaType()))
-                        .build()
+                    val req = buildAuthenticatedTvRequest("http://$targetIp:$targetPort/refresh", "POST", null)
                     httpClient.newCall(req).execute().close()
                 } catch (_: Exception) {
                 }
@@ -1210,11 +1454,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupDiscovery() {
         discoveryManager?.stop()
-        discoveryManager = MobileDiscoveryManager(this, phonePort = 8080) { tvIp, tvPort, tvName ->
-            runOnUiThread {
-                onTvDiscovered(tvIp, tvPort, tvName)
+        discoveryManager = MobileDiscoveryManager(
+            context = this,
+            phonePortProvider = { ServerService.serverPort },
+            onTvDiscovered = { tvIp, tvPort, tvName ->
+                runOnUiThread {
+                    onTvDiscovered(tvIp, tvPort, tvName)
+                }
+            },
+            onTvDisconnected = {
+                runOnUiThread {
+                    onTvExplicitlyDisconnected()
+                }
             }
-        }
+        )
         discoveryManager?.start()
     }
 
@@ -1234,10 +1487,77 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updateServerUI()
         syncTvPlaybackStatus()
+        startPeriodicTvPoll()
     }
 
-    fun onTvPlaybackStarted(mediaId: String, title: String, durationMs: Long) {
+    override fun onPause() {
+        super.onPause()
+        periodicTvPollJob?.cancel()
+    }
+
+    fun onTvDiscoveredFromHttp(
+        tvIp: String,
+        tvPort: Int = 8085,
+        tvName: String = "PocketStream TV",
+        sessionId: String = "",
+        sessionKey: String = ""
+    ) {
+        if (tvIp.isEmpty()) return
         runOnUiThread {
+            connectedTvIp = tvIp
+            connectedTvPort = tvPort
+            if (tvName.isNotEmpty()) connectedTvName = tvName
+            if (sessionId.isNotEmpty()) connectedTvSessionId = sessionId
+            if (sessionKey.isNotEmpty()) connectedTvSessionKey = sessionKey
+            isTvPaired = true
+            prefs.edit()
+                .putString("last_tv_ip", connectedTvIp)
+                .putInt("last_tv_port", connectedTvPort)
+                .putString("last_tv_name", connectedTvName)
+                .apply()
+            if (connectedTvSessionKey.isNotEmpty()) {
+                prefs.edit()
+                    .putString("last_tv_sid", connectedTvSessionId)
+                    .putString("last_tv_key", connectedTvSessionKey)
+                    .apply()
+            }
+            updateTvTargetUI(connectedTvIp, connectedTvPort, connectedTvName, isPaired = true)
+            updateServerUI()
+        }
+    }
+
+    fun onTvPlaybackStarted(
+        mediaId: String,
+        title: String,
+        durationMs: Long,
+        tvIp: String = "",
+        tvPort: Int = 8085,
+        tvName: String = "",
+        sessionId: String = "",
+        sessionKey: String = ""
+    ) {
+        runOnUiThread {
+            if (tvIp.isNotEmpty()) {
+                connectedTvIp = tvIp
+                connectedTvPort = tvPort
+                if (tvName.isNotEmpty()) connectedTvName = tvName
+                if (sessionId.isNotEmpty()) connectedTvSessionId = sessionId
+                if (sessionKey.isNotEmpty()) connectedTvSessionKey = sessionKey
+                isTvPaired = true
+                prefs.edit()
+                    .putString("last_tv_ip", connectedTvIp)
+                    .putInt("last_tv_port", connectedTvPort)
+                    .putString("last_tv_name", connectedTvName)
+                    .apply()
+                if (connectedTvSessionKey.isNotEmpty()) {
+                    prefs.edit()
+                        .putString("last_tv_sid", connectedTvSessionId)
+                        .putString("last_tv_key", connectedTvSessionKey)
+                        .apply()
+                }
+                updateTvTargetUI(connectedTvIp, connectedTvPort, connectedTvName, isPaired = true)
+                updateServerUI()
+            }
             activeStreamingMediaId = mediaId
             adapter.setActiveStreamingId(mediaId)
             showNowPlaying(title, durationMs)
@@ -1253,10 +1573,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun onTvExplicitlyDisconnected() {
+        runOnUiThread {
+            connectedTvIp = ""
+            connectedTvPort = 8085
+            connectedTvName = ""
+            connectedTvSessionId = ""
+            connectedTvSessionKey = ""
+            isTvPaired = false
+            prefs.edit()
+                .remove("last_tv_ip")
+                .remove("last_tv_port")
+                .remove("last_tv_name")
+                .remove("last_tv_sid")
+                .remove("last_tv_key")
+                .remove("last_tv_caps")
+                .apply()
+            updateTvTargetUI("", 8085, "", isPaired = false)
+            hideNowPlaying()
+            if (ServerService.isServerRunning) {
+                toggleServerWithSpinner(start = false)
+            } else {
+                updateServerUI()
+            }
+            Toast.makeText(this@MainActivity, "TV disconnected", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onDestroy() {
         if (instance === this) instance = null
         discoveryManager?.stop()
         statusSyncJob?.cancel()
+        periodicTvPollJob?.cancel()
         preparingCountdownJob?.cancel()
         preparingDialog?.dismiss()
         super.onDestroy()

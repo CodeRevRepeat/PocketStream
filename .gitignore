@@ -4,6 +4,7 @@
 release/*
 !release/mobile-release.apk
 !release/tv-release.apk
+!release/PocketStream.ipa
 
 # Files for the ART/Dalvik VM
 *.dex

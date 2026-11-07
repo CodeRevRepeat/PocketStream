@@ -130,6 +130,9 @@ class MediaAdapter(
                 val isStreaming = (item.id == activeStreamingId)
                 if (isStreaming) {
                     binding.btnStreamToTv.text = "Stop Stream"
+                    binding.btnStreamToTv.setTextColor(Color.WHITE)
+                    binding.btnStreamToTv.strokeWidth = 0
+                    binding.btnStreamToTv.strokeColor = ColorStateList.valueOf(Color.TRANSPARENT)
                     binding.btnStreamToTv.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#EF4444")) // Red
                     binding.btnStreamToTv.setOnClickListener {
                         onStopStreamClick(item)
@@ -139,6 +142,9 @@ class MediaAdapter(
                     }
                 } else {
                     binding.btnStreamToTv.text = "Stream to TV"
+                    binding.btnStreamToTv.setTextColor(Color.WHITE)
+                    binding.btnStreamToTv.strokeWidth = 0
+                    binding.btnStreamToTv.strokeColor = ColorStateList.valueOf(Color.TRANSPARENT)
                     binding.btnStreamToTv.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#7C3AED")) // Purple
                     binding.btnStreamToTv.setOnClickListener {
                         onStreamClick(item)

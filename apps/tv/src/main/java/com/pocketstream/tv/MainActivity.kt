@@ -15,6 +15,7 @@ import com.pocketstream.tv.databinding.ActivityMainBinding
 import com.pocketstream.tv.player.ExoPlayerManager
 import com.pocketstream.tv.player.AudioTrackInfo
 import com.pocketstream.tv.receiver.TvReceiverServer
+import com.pocketstream.tv.receiver.TvPlaybackInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -54,6 +55,8 @@ class MainActivity : AppCompatActivity() {
     private val hideOsdRunnable = Runnable { hideOsd() }
     private var phoneBaseUrl = ""
     private var connectedPhoneName = ""
+    private var tvSessionId: String = java.util.UUID.randomUUID().toString().substring(0, 8)
+    private var tvSessionKey: String = com.pocketstream.protocol.AuthProtocol.generateSecureKey()
 
     private var currentStreamUrl: String = ""
     private var currentTitle: String = ""
@@ -112,12 +115,18 @@ class MainActivity : AppCompatActivity() {
         val savedIp = prefs.getString("last_phone_ip", null)
         val savedPort = prefs.getInt("last_phone_port", 8080)
         val savedName = prefs.getString("last_phone_name", "PocketStream Phone") ?: "PocketStream Phone"
+        val savedSid = prefs.getString("tv_session_id", null)
+        val savedKey = prefs.getString("tv_session_key", null)
 
-        if (!savedIp.isNullOrEmpty()) {
+        if (!savedIp.isNullOrEmpty() && !savedSid.isNullOrEmpty() && !savedKey.isNullOrEmpty()) {
+            tvSessionId = savedSid
+            tvSessionKey = savedKey
             phoneBaseUrl = "http://$savedIp:$savedPort"
             connectedPhoneName = savedName
             updatePhoneConnectionUi(true, "Connected to $savedName ($savedIp:$savedPort)")
         } else {
+            tvSessionId = java.util.UUID.randomUUID().toString().substring(0, 8)
+            tvSessionKey = com.pocketstream.protocol.AuthProtocol.generateSecureKey()
             updatePhoneSearchingUi("Searching for phone or scan QR...")
         }
 
@@ -160,8 +169,15 @@ class MainActivity : AppCompatActivity() {
         // Notify phone in background that TV started playing this item
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val localIp = discoveryManager?.getLocalIpAddress() ?: "127.0.0.1"
+                val tvDeviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim().ifEmpty { "Android TV" }
                 val json = JSONObject().apply {
                     put("mediaId", item.id)
+                    put("tvIp", localIp)
+                    put("tvPort", 8085)
+                    put("tvName", tvDeviceName)
+                    put("sessionId", tvSessionId)
+                    put("sessionKey", tvSessionKey)
                 }
                 val body = json.toString().toRequestBody("application/json".toMediaType())
                 val req = Request.Builder()
@@ -212,6 +228,8 @@ class MainActivity : AppCompatActivity() {
             receiverServer = TvReceiverServer(
                 port = 8085,
                 getConnectedPhoneIp = { getConnectedPhoneIp() },
+                getSessionKey = { tvSessionKey },
+                getSessionId = { tvSessionId },
                 onPlayRequested = { streamUrl, title, durationMs, startPositionMs ->
                     runOnUiThread {
                         val bringToFront = Intent(this@MainActivity, MainActivity::class.java).apply {
@@ -224,8 +242,18 @@ class MainActivity : AppCompatActivity() {
                 onControlRequested = { action, pos ->
                     runOnUiThread {
                         when (action.uppercase()) {
-                            "PLAY" -> if (!isPlaying) playerManager?.togglePlayPause()
-                            "PAUSE" -> if (isPlaying) playerManager?.togglePlayPause()
+                            "PLAY", "RESUME" -> {
+                                playerManager?.resume()
+                                showOsd()
+                            }
+                            "PAUSE" -> {
+                                playerManager?.pause()
+                                showOsd()
+                            }
+                            "TOGGLE", "PLAY_PAUSE" -> {
+                                playerManager?.togglePlayPause()
+                                showOsd()
+                            }
                             "PREPARING_SEEK" -> {
                                 playerManager?.pause()
                                 showTvPreparing(pos)
@@ -237,13 +265,13 @@ class MainActivity : AppCompatActivity() {
                                 showOsd()
                             }
                             "STOP" -> stopPlayback()
-                            "RW" -> {
+                            "RW", "REWIND", "-10S", "10-", "SKIP_BACKWARD" -> {
                                 val cur = getCurrentEffectiveTime()
                                 val target = (cur - 10000L).coerceAtLeast(0L)
                                 seekToSafe(target)
                                 showOsd()
                             }
-                            "FF" -> {
+                            "FF", "FORWARD", "+10S", "10+", "SKIP_FORWARD" -> {
                                 val cur = getCurrentEffectiveTime()
                                 val maxDur = if (totalDurationMs > 0) totalDurationMs else Long.MAX_VALUE
                                 val target = (cur + 10000L).coerceAtMost(maxDur)
@@ -258,7 +286,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 },
                 getPlaybackStatus = {
-                    Triple(isPlaying, currentPositionMs, totalDurationMs)
+                    TvPlaybackInfo(
+                        isPlaying = isPlaying,
+                        positionMs = currentPositionMs,
+                        durationMs = totalDurationMs,
+                        title = currentTitle,
+                        streamUrl = currentStreamUrl
+                    )
                 },
                 onPairRequested = { phoneIp, phonePort, deviceName ->
                     runOnUiThread {
@@ -487,15 +521,27 @@ class MainActivity : AppCompatActivity() {
         for (track in tracks) {
             val itemView = layoutInflater.inflate(R.layout.item_tv_audio_track, binding.llAudioTrackList, false)
             itemView.id = View.generateViewId()
+            itemView.isSelected = track.isSelected
             val tvCheck = itemView.findViewById<TextView>(R.id.tvAudioTrackCheck)
             val tvTitle = itemView.findViewById<TextView>(R.id.tvAudioTrackTitle)
 
             tvCheck.visibility = if (track.isSelected) View.VISIBLE else View.INVISIBLE
             tvTitle.text = track.label
-            if (track.isSelected) {
-                tvTitle.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.tv_accent_cyan))
-            } else {
-                tvTitle.setTextColor(android.graphics.Color.WHITE)
+
+            fun updateItemColors(isFocused: Boolean) {
+                if (isFocused) {
+                    tvTitle.setTextColor(android.graphics.Color.BLACK)
+                    tvCheck.setTextColor(android.graphics.Color.BLACK)
+                } else {
+                    val color = if (track.isSelected) android.graphics.Color.parseColor("#CCFF00") else android.graphics.Color.WHITE
+                    tvTitle.setTextColor(color)
+                    tvCheck.setTextColor(android.graphics.Color.parseColor("#CCFF00"))
+                }
+            }
+
+            updateItemColors(itemView.hasFocus())
+            itemView.setOnFocusChangeListener { _, hasFocus ->
+                updateItemColors(hasFocus)
             }
 
             itemView.setOnClickListener {
@@ -561,14 +607,26 @@ class MainActivity : AppCompatActivity() {
                         .build()
                     httpClient.newCall(req).execute().close()
                 } catch (_: Exception) {}
+                try {
+                    val req2 = Request.Builder()
+                        .url("$currentUrl/api/v1/disconnect")
+                        .post("{}".toRequestBody("application/json".toMediaType()))
+                        .build()
+                    httpClient.newCall(req2).execute().close()
+                } catch (_: Exception) {}
             }
         }
+        discoveryManager?.broadcastTvDisconnect()
         phoneBaseUrl = ""
         connectedPhoneName = ""
+        tvSessionId = java.util.UUID.randomUUID().toString().substring(0, 8)
+        tvSessionKey = com.pocketstream.protocol.AuthProtocol.generateSecureKey()
         getSharedPreferences("pocketstream_tv_prefs", MODE_PRIVATE).edit()
             .remove("last_phone_ip")
             .remove("last_phone_port")
             .remove("last_phone_name")
+            .remove("tv_session_id")
+            .remove("tv_session_key")
             .apply()
 
         updatePhoneConnectionUi(false, "Phone disconnected")
@@ -620,7 +678,16 @@ class MainActivity : AppCompatActivity() {
             // Retry up to 4 times with progressive backoff (handles momentary startup latency)
             for (attempt in 1..4) {
                 try {
-                    val req = Request.Builder().url("$phoneBaseUrl/api/v1/library").build()
+                    val localIp = discoveryManager?.getLocalIpAddress() ?: "127.0.0.1"
+                    val tvDeviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim().ifEmpty { "Android TV" }
+                    val req = Request.Builder()
+                        .url("$phoneBaseUrl/api/v1/library")
+                        .addHeader("X-PS-Tv-Ip", localIp)
+                        .addHeader("X-PS-Tv-Port", "8085")
+                        .addHeader("X-PS-Tv-Name", tvDeviceName)
+                        .addHeader("X-PS-Tv-Sid", tvSessionId)
+                        .addHeader("X-PS-Tv-Key", tvSessionKey)
+                        .build()
                     val res = httpClient.newCall(req).execute()
                     if (res.isSuccessful) {
                         val body = res.body?.string() ?: "[]"
@@ -683,8 +750,9 @@ class MainActivity : AppCompatActivity() {
     private fun showQrPairDialog() {
         val localIp = discoveryManager?.getLocalIpAddress() ?: "127.0.0.1"
         val tvDeviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim().ifEmpty { "Android TV" }
-        val tvInfo = TvInfo(ip = localIp, port = 8085, name = tvDeviceName)
+        val tvInfo = TvInfo(ip = localIp, port = 8085, name = tvDeviceName, sessionId = tvSessionId, sessionKey = tvSessionKey)
         val qrContent = tvInfo.toQrString()
+        android.util.Log.i("MainActivity", "TV Pairing QR: $qrContent")
         val qrBitmap = QrUtils.generateQrBitmap(qrContent, 400)
 
         val dialogView = layoutInflater.inflate(R.layout.dialog_qr_pair, null)
@@ -726,6 +794,8 @@ class MainActivity : AppCompatActivity() {
             .putString("last_phone_ip", phoneIp)
             .putInt("last_phone_port", phonePort)
             .putString("last_phone_name", deviceName)
+            .putString("tv_session_id", tvSessionId)
+            .putString("tv_session_key", tvSessionKey)
             .apply()
 
         qrDialog?.dismiss()
@@ -738,10 +808,14 @@ class MainActivity : AppCompatActivity() {
     private fun onPhoneDisconnected() {
         phoneBaseUrl = ""
         connectedPhoneName = ""
+        tvSessionId = java.util.UUID.randomUUID().toString().substring(0, 8)
+        tvSessionKey = com.pocketstream.protocol.AuthProtocol.generateSecureKey()
         getSharedPreferences("pocketstream_tv_prefs", MODE_PRIVATE).edit()
             .remove("last_phone_ip")
             .remove("last_phone_port")
             .remove("last_phone_name")
+            .remove("tv_session_id")
+            .remove("tv_session_key")
             .apply()
 
         updatePhoneConnectionUi(false, "Phone disconnected")
@@ -844,6 +918,12 @@ class MainActivity : AppCompatActivity() {
         binding.layoutHome.visibility = View.VISIBLE
         binding.layoutHome.bringToFront()
         binding.btnRefreshLibrary.requestFocus()
+
+        isPlaying = false
+        currentPositionMs = 0L
+        totalDurationMs = 0L
+        currentTitle = ""
+        currentStreamUrl = ""
 
         if (phoneBaseUrl.isNotEmpty()) {
             CoroutineScope(Dispatchers.IO).launch {
@@ -984,6 +1064,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun seekToSafe(targetMs: Long) {
+        currentPositionMs = targetMs
+        updatePlaybackUi(playing = isPlaying, timeMs = targetMs, lengthMs = totalDurationMs)
+
         // Direct play stream: ExoPlayer supports instant Range seeking!
         if (!currentStreamUrl.contains("/stream/live/")) {
             playerManager?.seekTo(targetMs)

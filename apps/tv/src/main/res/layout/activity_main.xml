@@ -457,11 +457,11 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="SELECT AUDIO TRACK"
-                android:textColor="@color/tv_accent_cyan"
-                android:textSize="11sp"
+                android:textColor="#CCFF00"
+                android:textSize="13sp"
                 android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:layout_marginBottom="8dp" />
+                android:letterSpacing="0.1"
+                android:layout_marginBottom="10dp" />
 
             <LinearLayout
                 android:id="@+id/llAudioTrackList"

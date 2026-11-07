@@ -31,10 +31,34 @@ class ServerService : Service() {
 
         var isServerRunning = false
             private set
+        var serverPort: Int = try { findAvailablePort(8080) } catch (_: Exception) { 8080 }
+            private set
         var serverUrl: String = ""
             private set
         var serviceInstance: ServerService? = null
             private set
+
+        fun findAvailablePort(defaultPort: Int = 8080): Int {
+            val candidates = intArrayOf(defaultPort, 8082, 8084, 8088, 8090)
+            for (port in candidates) {
+                if (isPortAvailable(port)) {
+                    return port
+                }
+            }
+            return try {
+                java.net.ServerSocket(0).use { it.localPort }
+            } catch (_: Exception) {
+                defaultPort
+            }
+        }
+
+        fun isPortAvailable(port: Int): Boolean {
+            return try {
+                java.net.ServerSocket(port).use { true }
+            } catch (_: Exception) {
+                false
+            }
+        }
 
         fun updateNotification(title: String, message: String) {
             serviceInstance?.updateNotificationText(title, message)
@@ -106,12 +130,42 @@ class ServerService : Service() {
         if (isServerRunning) return
 
         try {
-            val port = 8080
-            val ip = NetworkUtils.getLocalWifiIpAddress()
-            serverUrl = "http://$ip:$port"
+            val candidatePorts = mutableListOf<Int>()
+            if (serverPort > 0) candidatePorts.add(serverPort)
+            candidatePorts.addAll(listOf(8080, 8082, 8084, 8088, 8090, 0))
+            val distinctCandidates = candidatePorts.distinct()
 
-            httpServer = PocketHttpServer(applicationContext, port)
-            httpServer?.start()
+            var boundServer: PocketHttpServer? = null
+            var boundPort = 0
+
+            for (candidate in distinctCandidates) {
+                try {
+                    val server = PocketHttpServer(applicationContext, candidate)
+                    server.start()
+                    val port = server.listeningPort
+                    if (port > 0) {
+                        boundServer = server
+                        boundPort = port
+                        Log.i(TAG, "PocketHttpServer successfully started on port $port")
+                        break
+                    } else {
+                        try { server.stop() } catch (_: Exception) {}
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Port $candidate unavailable (${e.message}), trying next candidate...")
+                }
+            }
+
+            if (boundServer == null || boundPort <= 0) {
+                Log.e(TAG, "Failed starting HTTP server on any candidate port")
+                stopSelf()
+                return
+            }
+
+            httpServer = boundServer
+            serverPort = boundPort
+            val ip = NetworkUtils.getLocalWifiIpAddress()
+            serverUrl = "http://$ip:$serverPort"
 
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PocketStream:ServerWakeLock")
@@ -145,6 +199,7 @@ class ServerService : Service() {
             wakeLock = null
             isServerRunning = false
             serverUrl = ""
+            serverPort = try { findAvailablePort(8080) } catch (_: Exception) { 8080 }
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping server: ${e.message}")
         }

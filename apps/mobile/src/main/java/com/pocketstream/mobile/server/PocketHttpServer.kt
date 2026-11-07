@@ -29,13 +29,14 @@ class PocketHttpServer(
         private const val TAG = "PocketHttpServer"
         private const val STREAM_BUFFER_SIZE = 64 * 1024 // 64 KB buffer for high-bitrate video streaming
         private val SAFE_MEDIA_ID_REGEX = Regex("^[a-zA-Z0-9_-]+$")
-    }
 
-    private fun addCorsHeaders(res: Response): Response {
-        res.addHeader("Access-Control-Allow-Origin", "*")
-        res.addHeader("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS")
-        res.addHeader("Access-Control-Allow-Headers", "Range, Content-Type, Accept")
-        return res
+        fun cleanIp(ip: String?): String {
+            if (ip == null) return ""
+            var cleaned = ip.trim()
+            if (cleaned.startsWith("/")) cleaned = cleaned.substring(1)
+            if (cleaned.startsWith("::ffff:")) cleaned = cleaned.removePrefix("::ffff:")
+            return cleaned
+        }
     }
 
     override fun serve(session: IHTTPSession): Response {
@@ -43,8 +44,7 @@ class PocketHttpServer(
         val method = session.method
 
         if (method == Method.OPTIONS) {
-            val res = newFixedLengthResponse(Response.Status.OK, "text/plain", "")
-            return addCorsHeaders(res)
+            return newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, "text/plain", "OPTIONS Not Allowed")
         }
 
         val response = when {
@@ -66,6 +66,16 @@ class PocketHttpServer(
             }
 
             uri == "/api/v1/library" && method == Method.GET -> {
+                val tvIp = session.headers["x-ps-tv-ip"] ?: session.remoteIpAddress?.let { cleanIp(it) } ?: ""
+                val tvPort = session.headers["x-ps-tv-port"]?.toIntOrNull() ?: 8085
+                val tvName = session.headers["x-ps-tv-name"] ?: "PocketStream TV"
+                val tvSid = session.headers["x-ps-tv-sid"] ?: ""
+                val tvKey = session.headers["x-ps-tv-key"] ?: ""
+                if (tvIp.isNotEmpty() && tvKey.isNotEmpty()) {
+                    mainHandler.post {
+                        MainActivity.instance?.onTvDiscoveredFromHttp(tvIp, tvPort, tvName, tvSid, tvKey)
+                    }
+                }
                 val items = MediaRepository.getAllMediaItems()
                 val jsonArr = JSONArray()
                 for (item in items) {
@@ -140,6 +150,10 @@ class PocketHttpServer(
                 handleStopRequest(session)
             }
 
+            (uri == "/disconnect" || uri == "/api/v1/disconnect") && method == Method.POST -> {
+                handleDisconnectRequest(session)
+            }
+
             else -> {
                 newFixedLengthResponse(
                     Response.Status.NOT_FOUND,
@@ -148,7 +162,7 @@ class PocketHttpServer(
                 )
             }
         }
-        return addCorsHeaders(response)
+        return response
     }
 
     private fun handlePlayRequest(session: IHTTPSession): Response {
@@ -213,7 +227,22 @@ class PocketHttpServer(
                 android.widget.Toast.makeText(context, notifMsg, android.widget.Toast.LENGTH_SHORT).show()
             }
 
-            MainActivity.instance?.onTvPlaybackStarted(media.id, media.title, media.durationMs)
+            val tvIp = json.optString("tvIp", session.headers["x-ps-tv-ip"] ?: session.remoteIpAddress?.let { cleanIp(it) } ?: "")
+            val tvPort = json.optInt("tvPort", session.headers["x-ps-tv-port"]?.toIntOrNull() ?: 8085)
+            val tvName = json.optString("tvName", session.headers["x-ps-tv-name"] ?: "PocketStream TV")
+            val sessionId = json.optString("sessionId", session.headers["x-ps-tv-sid"] ?: "")
+            val sessionKey = json.optString("sessionKey", session.headers["x-ps-tv-key"] ?: "")
+
+            MainActivity.instance?.onTvPlaybackStarted(
+                mediaId = media.id,
+                title = media.title,
+                durationMs = media.durationMs,
+                tvIp = tvIp,
+                tvPort = tvPort,
+                tvName = tvName,
+                sessionId = sessionId,
+                sessionKey = sessionKey
+            )
 
             resJson.put("status", "ok")
             resJson.put("mode", "direct")
@@ -229,13 +258,38 @@ class PocketHttpServer(
         }
     }
 
+    private fun notifyPlaybackStarted(mediaId: String, session: IHTTPSession? = null) {
+        val media = MediaRepository.getMediaById(mediaId) ?: return
+        val act = MainActivity.instance ?: return
+        val tvIp = session?.headers?.get("x-ps-tv-ip") ?: session?.remoteIpAddress?.let { cleanIp(it) } ?: ""
+        val tvPort = session?.headers?.get("x-ps-tv-port")?.toIntOrNull() ?: 8085
+        val tvName = session?.headers?.get("x-ps-tv-name") ?: "PocketStream TV"
+        val sessionId = session?.headers?.get("x-ps-tv-sid") ?: ""
+        val sessionKey = session?.headers?.get("x-ps-tv-key") ?: ""
+
+        if (act.activeStreamingMediaId != media.id || act.resolvedTvIp().isEmpty()) {
+            mainHandler.post {
+                act.onTvPlaybackStarted(media.id, media.title, media.durationMs, tvIp, tvPort, tvName, sessionId, sessionKey)
+            }
+        }
+    }
+
     private fun handleStopRequest(session: IHTTPSession): Response {
         ServerService.updateNotification(
             "PocketStream Server Running",
             "Streaming idle"
         )
-        MainActivity.instance?.onTvPlaybackStopped()
+        mainHandler.post {
+            MainActivity.instance?.onTvPlaybackStopped()
+        }
         return newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"stopped\"}")
+    }
+
+    private fun handleDisconnectRequest(session: IHTTPSession): Response {
+        mainHandler.post {
+            MainActivity.instance?.onTvExplicitlyDisconnected()
+        }
+        return newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
     }
 
     private fun handleTranscodeSeekRequest(session: IHTTPSession): Response {
@@ -262,6 +316,7 @@ class PocketHttpServer(
     }
 
     private fun handleLiveOrTranscodedStream(mediaId: String, session: IHTTPSession): Response {
+        notifyPlaybackStarted(mediaId, session)
         // 1. If file has already finished transcoding, serve as standard static file with full Range seeking
         val completed = TranscoderManager.getTranscodedFile(context, mediaId)
         if (completed != null) {
@@ -357,6 +412,7 @@ class PocketHttpServer(
     }
 
     private fun handleStream(mediaId: String, session: IHTTPSession): Response {
+        notifyPlaybackStarted(mediaId, session)
         // If a progressive transcoded version exists, serve that directly for 100% smooth seekable playback!
         val completed = TranscoderManager.getTranscodedFile(context, mediaId)
         if (completed != null) {
@@ -461,7 +517,7 @@ class PocketHttpServer(
             val fis = FileInputStream(thumbFile)
             val res = newFixedLengthResponse(Response.Status.OK, "image/jpeg", fis, thumbFile.length())
             res.addHeader("Cache-Control", "public, max-age=86400")
-            return addCorsHeaders(res)
+            return res
         }
         val media = MediaRepository.getMediaById(mediaId)
         if (media != null) {
@@ -470,10 +526,10 @@ class PocketHttpServer(
                 val fis = FileInputStream(generated)
                 val res = newFixedLengthResponse(Response.Status.OK, "image/jpeg", fis, generated.length())
                 res.addHeader("Cache-Control", "public, max-age=86400")
-                return addCorsHeaders(res)
+                return res
             }
         }
-        return addCorsHeaders(newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Thumbnail not found"))
+        return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Thumbnail not found")
     }
 
     private class BoundedInputStream(

@@ -330,6 +330,40 @@ class TvDiscoveryManager(
         }
     }
 
+    fun broadcastTvDisconnect() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val localIp = getLocalIpAddress()
+                val tvDeviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim().ifEmpty { "Android TV" }
+                val json = JSONObject().apply {
+                    put("type", "TV_DISCONNECT")
+                    put("tvIp", localIp)
+                    put("tvPort", tvPort)
+                    put("deviceName", tvDeviceName)
+                }
+                val bytes = json.toString().toByteArray(Charsets.UTF_8)
+                val targets = getBroadcastTargets()
+                val socket = DatagramSocket()
+                socket.broadcast = true
+                for (target in targets) {
+                    try {
+                        val packet = DatagramPacket(
+                            bytes,
+                            bytes.size,
+                            target,
+                            DiscoveryConstants.UDP_DISCOVERY_PORT
+                        )
+                        socket.send(packet)
+                    } catch (_: Exception) {}
+                }
+                socket.close()
+                Log.i(TAG, "Broadcasted TV_DISCONNECT to ${targets.size} targets")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed broadcasting TV_DISCONNECT: ${e.message}")
+            }
+        }
+    }
+
     private fun stopUdpListener() {
         try {
             udpJob?.cancel()

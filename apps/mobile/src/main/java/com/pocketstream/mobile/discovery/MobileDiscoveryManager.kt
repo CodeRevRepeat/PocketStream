@@ -6,6 +6,7 @@ import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.util.Log
 import com.pocketstream.mobile.server.NetworkUtils
+import com.pocketstream.mobile.service.ServerService
 import com.pocketstream.protocol.DiscoveryConstants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,9 +21,19 @@ import java.net.InetAddress
 
 class MobileDiscoveryManager(
     private val context: Context,
-    private val phonePort: Int = 8080,
-    private val onTvDiscovered: (tvIp: String, tvPort: Int, tvName: String) -> Unit
+    private val phonePortProvider: () -> Int = { ServerService.serverPort },
+    private val onTvDiscovered: (tvIp: String, tvPort: Int, tvName: String) -> Unit,
+    private val onTvDisconnected: () -> Unit = {}
 ) {
+    constructor(
+        context: Context,
+        phonePort: Int,
+        onTvDiscovered: (tvIp: String, tvPort: Int, tvName: String) -> Unit,
+        onTvDisconnected: () -> Unit = {}
+    ) : this(context, { phonePort }, onTvDiscovered, onTvDisconnected)
+
+    val phonePort: Int get() = phonePortProvider()
+
     companion object {
         private const val TAG = "MobileDiscoveryMgr"
     }
@@ -167,7 +178,10 @@ class MobileDiscoveryManager(
                         val json = JSONObject(msg)
                         val type = json.optString("type")
 
-                        if (type == "TV_ANNOUNCE") {
+                        if (type == "TV_DISCONNECT") {
+                            Log.i(TAG, "UDP TV announced disconnect")
+                            onTvDisconnected()
+                        } else if (type == "TV_ANNOUNCE") {
                             val tvIp = json.optString("tvIp", senderIp).ifEmpty { senderIp }
                             val tvPort = json.optInt("tvPort", 8085)
                             val name = json.optString("deviceName", "Android TV")

@@ -12,16 +12,23 @@ public struct TvInfo: Codable, Equatable, Identifiable {
     public let ip: String
     public let port: Int
     public let name: String
+    public let sessionId: String
+    public let sessionKey: String
 
-    public init(ip: String, port: Int = 8085, name: String = "PocketStream TV") {
+    public init(ip: String, port: Int = 8085, name: String = "PocketStream TV", sessionId: String = "", sessionKey: String = "") {
         self.ip = ip
         self.port = port
         self.name = name
+        self.sessionId = sessionId
+        self.sessionKey = sessionKey
     }
 
     public func toQrString() -> String {
         let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
-        return "\(DiscoveryConstants.qrScheme)?ip=\(ip)&port=\(port)&name=\(encodedName)"
+        var base = "\(DiscoveryConstants.qrScheme)?ip=\(ip)&port=\(port)&name=\(encodedName)"
+        if !sessionId.isEmpty { base += "&sid=\(sessionId)" }
+        if !sessionKey.isEmpty { base += "&key=\(sessionKey)" }
+        return base
     }
 
     public func toDictionary() -> [String: Any] {
@@ -29,7 +36,8 @@ public struct TvInfo: Codable, Equatable, Identifiable {
             "type": "TV_ANNOUNCE",
             "ip": ip,
             "port": port,
-            "name": name
+            "name": name,
+            "sessionId": sessionId
         ]
     }
 
@@ -37,7 +45,8 @@ public struct TvInfo: Codable, Equatable, Identifiable {
         guard let ip = dictionary["ip"] as? String, !ip.isEmpty else { return nil }
         let port = dictionary["port"] as? Int ?? 8085
         let name = dictionary["name"] as? String ?? "PocketStream TV"
-        return TvInfo(ip: ip, port: port, name: name)
+        let sessionId = dictionary["sessionId"] as? String ?? ""
+        return TvInfo(ip: ip, port: port, name: name, sessionId: sessionId)
     }
 
     public static func from(qrString: String) -> TvInfo? {
@@ -51,6 +60,8 @@ public struct TvInfo: Codable, Equatable, Identifiable {
         var ip = ""
         var port = 8085
         var name = "PocketStream TV"
+        var sessionId = ""
+        var sessionKey = ""
 
         for item in queryItems {
             switch item.name {
@@ -62,13 +73,17 @@ public struct TvInfo: Codable, Equatable, Identifiable {
                 }
             case "name":
                 name = item.value ?? "PocketStream TV"
+            case "sid":
+                sessionId = item.value ?? ""
+            case "key":
+                sessionKey = item.value ?? ""
             default:
                 break
             }
         }
 
         guard !ip.isEmpty else { return nil }
-        return TvInfo(ip: ip, port: port, name: name)
+        return TvInfo(ip: ip, port: port, name: name, sessionId: sessionId, sessionKey: sessionKey)
     }
 }
 

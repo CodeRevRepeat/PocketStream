@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Focused state: Vibrant solid Lime for projector visibility with crisp border -->
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="10dp" />
+            <solid android:color="#CCFF00" />
+            <stroke
+                android:width="2.5dp"
+                android:color="#FFFFFF" />
+        </shape>
+    </item>
+    <!-- Selected state (unfocused) -->
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="10dp" />
+            <solid android:color="#1A2820" />
+            <stroke
+                android:width="1.5dp"
+                android:color="#CCFF00" />
+        </shape>
+    </item>
+    <!-- Normal state: Solid dark card with distinct stroke -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="10dp" />
+            <solid android:color="#1E222D" />
+            <stroke
+                android:width="1.5dp"
+                android:color="#333A4D" />
+        </shape>
+    </item>
+</selector>

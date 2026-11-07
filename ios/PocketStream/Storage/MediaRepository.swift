@@ -239,6 +239,24 @@ public class MediaRepository: ObservableObject {
             }
         }
 
+        var audioCodec = "aac"
+        if let audioTrack = asset.tracks(withMediaType: .audio).first {
+            let audioDescriptions = audioTrack.formatDescriptions as! [CMFormatDescription]
+            if let firstDesc = audioDescriptions.first {
+                let audioSubType = CMFormatDescriptionGetMediaSubType(firstDesc)
+                let fourCC = fourCCToString(audioSubType).lowercased()
+                switch fourCC {
+                case "mp4a": audioCodec = "aac"
+                case "ac-3": audioCodec = "ac3"
+                case "ec-3": audioCodec = "eac3"
+                case "dts ", "dtsc", "dtsh": audioCodec = "dts"
+                case "opus": audioCodec = "opus"
+                case "flac": audioCodec = "flac"
+                default: audioCodec = fourCC.isEmpty ? "aac" : fourCC
+                }
+            }
+        }
+
         let localMedia = LocalMedia(
             id: id,
             url: url,
@@ -249,7 +267,7 @@ public class MediaRepository: ObservableObject {
             width: width,
             height: height,
             videoCodec: videoCodec,
-            audioCodec: "aac",
+            audioCodec: audioCodec,
             is10Bit: is10Bit
         )
         let _ = generateThumbnail(for: localMedia)

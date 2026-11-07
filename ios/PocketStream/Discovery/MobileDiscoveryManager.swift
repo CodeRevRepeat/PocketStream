@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import CryptoKit
 
 public class MobileDiscoveryManager: ObservableObject {
     public static let shared = MobileDiscoveryManager()
@@ -36,9 +37,22 @@ public class MobileDiscoveryManager: ObservableObject {
         UserDefaults.standard.set(info.ip, forKey: "last_tv_ip")
         UserDefaults.standard.set(info.port, forKey: "last_tv_port")
         UserDefaults.standard.set(info.name, forKey: "last_tv_name")
+        if !info.sessionId.isEmpty { UserDefaults.standard.set(info.sessionId, forKey: "last_tv_sid") }
+        if !info.sessionKey.isEmpty { UserDefaults.standard.set(info.sessionKey, forKey: "last_tv_key") }
 
         fetchTvCapabilities(tvIp: info.ip, tvPort: info.port)
-        sendPairHandshake(tvIp: info.ip, tvPort: info.port)
+        sendPairHandshake(tvIp: info.ip, tvPort: info.port, sessionKey: info.sessionKey, sessionId: info.sessionId)
+    }
+
+    public func disconnectTv() {
+        DispatchQueue.main.async {
+            self.connectedTv = nil
+            UserDefaults.standard.removeObject(forKey: "last_tv_ip")
+            UserDefaults.standard.removeObject(forKey: "last_tv_port")
+            UserDefaults.standard.removeObject(forKey: "last_tv_name")
+            UserDefaults.standard.removeObject(forKey: "last_tv_sid")
+            UserDefaults.standard.removeObject(forKey: "last_tv_key")
+        }
     }
 
     private func restoreLastConnectedTv() {
@@ -46,7 +60,9 @@ public class MobileDiscoveryManager: ObservableObject {
         if let ip = defaults.string(forKey: "last_tv_ip"), !ip.isEmpty {
             let port = defaults.integer(forKey: "last_tv_port") == 0 ? 8085 : defaults.integer(forKey: "last_tv_port")
             let name = defaults.string(forKey: "last_tv_name") ?? "Android TV"
-            let info = TvInfo(ip: ip, port: port, name: name)
+            let sid = defaults.string(forKey: "last_tv_sid") ?? ""
+            let key = defaults.string(forKey: "last_tv_key") ?? ""
+            let info = TvInfo(ip: ip, port: port, name: name, sessionId: sid, sessionKey: key)
             connectedTv = info
             fetchTvCapabilities(tvIp: ip, tvPort: port)
         }
@@ -69,19 +85,51 @@ public class MobileDiscoveryManager: ObservableObject {
         }.resume()
     }
 
-    public func sendPairHandshake(tvIp: String, tvPort: Int) {
+    public func sendPairHandshake(tvIp: String, tvPort: Int, sessionKey: String = "", sessionId: String = "") {
         guard let url = URL(string: "http://\(tvIp):\(tvPort)/pair") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let localIp = NetworkUtils.getLocalWifiIpAddress()
-        let dict: [String: Any] = [
+        var dict: [String: Any] = [
             "phoneIp": localIp,
             "phonePort": 8080,
             "deviceName": "iPhone / PocketStream"
         ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: dict, options: [])
+        let activeKey = sessionKey.isEmpty ? (connectedTv?.sessionKey ?? "") : sessionKey
+        let activeSid = sessionId.isEmpty ? (connectedTv?.sessionId ?? "") : sessionId
+        if !activeKey.isEmpty {
+            dict["sessionKey"] = activeKey
+        }
+        let bodyData = try? JSONSerialization.data(withJSONObject: dict, options: [])
+        request.httpBody = bodyData
+
+        if !activeKey.isEmpty {
+            let timestamp = Int64(Date().timeIntervalSince1970)
+            let nonce = UUID().uuidString.prefix(12)
+            let bodyHash: String
+            if let body = bodyData, !body.isEmpty {
+                let hash = SHA256.hash(data: body)
+                bodyHash = hash.compactMap { String(format: "%02x", $0) }.joined()
+            } else {
+                bodyHash = ""
+            }
+            let message = "POST\n/pair\n\(timestamp)\n\(nonce)\n\(bodyHash)"
+            let keyData = Data(base64Encoded: activeKey) ?? activeKey.data(using: .utf8) ?? Data()
+            let symKey = SymmetricKey(data: keyData)
+            let sig = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: symKey)
+            let sigString = Data(sig).base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+            if !activeSid.isEmpty {
+                request.setValue(activeSid, forHTTPHeaderField: "X-PS-Session")
+            }
+            request.setValue("\(timestamp)", forHTTPHeaderField: "X-PS-Timestamp")
+            request.setValue(String(nonce), forHTTPHeaderField: "X-PS-Nonce")
+            request.setValue(sigString, forHTTPHeaderField: "X-PS-Signature")
+        }
 
         URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
             guard let self = self, let data = data,
@@ -150,13 +198,17 @@ public class MobileDiscoveryManager: ObservableObject {
                           let json = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any] else {
                         return
                     }
-                    if let type = json["type"] as? String, type == "TV_ANNOUNCE" {
-                        if let tv = TvInfo.from(dictionary: json) {
-                            DispatchQueue.main.async {
-                                if !self.discoveredTvs.contains(where: { $0.ip == tv.ip }) {
-                                    self.discoveredTvs.append(tv)
-                                    if self.connectedTv == nil {
-                                        self.connectToTv(info: tv)
+                    if let type = json["type"] as? String {
+                        if type == "TV_DISCONNECT" {
+                            self.disconnectTv()
+                        } else if type == "TV_ANNOUNCE" {
+                            if let tv = TvInfo.from(dictionary: json) {
+                                DispatchQueue.main.async {
+                                    if !self.discoveredTvs.contains(where: { $0.ip == tv.ip }) {
+                                        self.discoveredTvs.append(tv)
+                                        if self.connectedTv == nil {
+                                            self.connectToTv(info: tv)
+                                        }
                                     }
                                 }
                             }

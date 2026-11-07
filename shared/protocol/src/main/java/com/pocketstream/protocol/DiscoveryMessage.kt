@@ -14,7 +14,9 @@ object DiscoveryConstants {
 data class TvInfo(
     val ip: String,
     val port: Int = 8085,
-    val name: String = "PocketStream TV"
+    val name: String = "PocketStream TV",
+    val sessionId: String = "",
+    val sessionKey: String = ""
 ) {
     fun toQrString(): String {
         val encodedName = try {
@@ -22,7 +24,10 @@ data class TvInfo(
         } catch (_: Exception) {
             name
         }
-        return "${DiscoveryConstants.QR_SCHEME}?ip=$ip&port=$port&name=$encodedName"
+        var base = "${DiscoveryConstants.QR_SCHEME}?ip=$ip&port=$port&name=$encodedName"
+        if (sessionId.isNotEmpty()) base += "&sid=$sessionId"
+        if (sessionKey.isNotEmpty()) base += "&key=$sessionKey"
+        return base
     }
 
     fun toJson(): JSONObject = JSONObject().apply {
@@ -30,6 +35,7 @@ data class TvInfo(
         put("ip", ip)
         put("port", port)
         put("name", name)
+        if (sessionId.isNotEmpty()) put("sessionId", sessionId)
     }
 
     companion object {
@@ -38,7 +44,8 @@ data class TvInfo(
             if (ip.isEmpty()) return null
             val port = json.optInt("port", 8085)
             val name = json.optString("name", "PocketStream TV")
-            return TvInfo(ip, port, name)
+            val sessionId = json.optString("sessionId", "")
+            return TvInfo(ip, port, name, sessionId = sessionId)
         }
 
         fun fromQrString(qrString: String): TvInfo? {
@@ -50,6 +57,8 @@ data class TvInfo(
                 var ip = ""
                 var port = 8085
                 var name = "PocketStream TV"
+                var sessionId = ""
+                var sessionKey = ""
 
                 val pairs = query.split("&")
                 for (pair in pairs) {
@@ -61,10 +70,12 @@ data class TvInfo(
                             "ip" -> ip = v
                             "port" -> port = v.toIntOrNull() ?: 8085
                             "name" -> name = v
+                            "sid" -> sessionId = v
+                            "key" -> sessionKey = v
                         }
                     }
                 }
-                if (ip.isNotEmpty()) TvInfo(ip, port, name) else null
+                if (ip.isNotEmpty()) TvInfo(ip, port, name, sessionId, sessionKey) else null
             } catch (_: Exception) {
                 null
             }

@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import CryptoKit
 
 public struct ContentView: View {
     @StateObject private var server = PocketHttpServer.shared
@@ -232,10 +233,10 @@ public struct ContentView: View {
                         .font(.system(size: 12))
                         .foregroundColor(Color(hex: "#C8F60D"))
                 } else {
-                    Text("No TV Connected")
+                    Text("Target TV")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(Color(hex: "#F8FAFC"))
-                    Text("Auto-searching on local Wi-Fi...")
+                    Text("Scan to pair TV")
                         .font(.system(size: 12))
                         .foregroundColor(Color(hex: "#94A3B8"))
                 }
@@ -246,7 +247,7 @@ public struct ContentView: View {
             Button(action: { showQrScanner = true }) {
                 HStack(spacing: 4) {
                     Image(systemName: "qrcode.viewfinder")
-                    Text("Scan TV")
+                    Text("Scan TV QR")
                 }
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(Color(hex: "#C8F60D"))
@@ -255,6 +256,8 @@ public struct ContentView: View {
                 .background(Color(hex: "#1E293B"))
                 .cornerRadius(8)
             }
+            .disabled(discovery.connectedTv != nil)
+            .opacity(discovery.connectedTv != nil ? 0.5 : 1.0)
         }
         .padding(14)
         .background(Color(hex: "#151D30"))
@@ -276,7 +279,7 @@ public struct ContentView: View {
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(server.isRunning ? Color(hex: "#22C55E") : Color(hex: "#94A3B8"))
                 }
-                Text(server.isRunning ? server.serverUrl : "Start media server to stream")
+                Text(server.isRunning ? server.serverUrl : (discovery.connectedTv != nil ? "Ready to start server" : "Please pair with TV first"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(Color(hex: "#F8FAFC"))
             }
@@ -293,12 +296,14 @@ public struct ContentView: View {
                     Text(server.isRunning ? "Stop" : "Start Server")
                         .font(.system(size: 13, weight: .semibold))
                 }
-                .foregroundColor(.white)
+                .foregroundColor(server.isRunning ? .white : .black)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(server.isRunning ? Color(hex: "#EF4444") : Color(hex: "#C8F60D"))
                 .cornerRadius(8)
             }
+            .disabled(!server.isRunning && discovery.connectedTv == nil)
+            .opacity(!server.isRunning && discovery.connectedTv == nil ? 0.5 : 1.0)
         }
         .padding(14)
         .background(Color(hex: "#151D30"))
@@ -515,9 +520,14 @@ public struct ContentView: View {
                 }
 
                 Button(action: { sendTvControl(action: tvIsPlaying ? "PAUSE" : "PLAY") }) {
-                    Image(systemName: tvIsPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 38))
-                        .foregroundColor(Color(hex: "#C8F60D"))
+                    ZStack {
+                        Circle()
+                            .fill(Color(hex: "#C8F60D"))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: tvIsPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.black)
+                    }
                 }
 
                 Button(action: { sendTvControl(action: "FF") }) {
@@ -550,6 +560,10 @@ public struct ContentView: View {
             server.stop()
             showToast("Server stopped")
         } else {
+            if discovery.connectedTv == nil {
+                showToast("Please pair with TV first")
+                return
+            }
             showServerStartingSpinner = true
             server.start()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -689,6 +703,34 @@ public struct ContentView: View {
         }
     }
 
+    private func attachAuthHeaders(to request: inout URLRequest, method: String, path: String, bodyData: Data?) {
+        guard let tv = discovery.connectedTv, !tv.sessionKey.isEmpty else { return }
+        let timestamp = Int64(Date().timeIntervalSince1970)
+        let nonce = UUID().uuidString.prefix(12)
+        let bodyHash: String
+        if let body = bodyData, !body.isEmpty {
+            let hash = SHA256.hash(data: body)
+            bodyHash = hash.compactMap { String(format: "%02x", $0) }.joined()
+        } else {
+            bodyHash = ""
+        }
+        let message = "\(method.uppercased())\n\(path)\n\(timestamp)\n\(nonce)\n\(bodyHash)"
+        guard let keyData = Data(base64Encoded: tv.sessionKey) ?? tv.sessionKey.data(using: .utf8) else { return }
+        let symKey = SymmetricKey(data: keyData)
+        let signature = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: symKey)
+        let sigString = Data(signature).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+
+        if !tv.sessionId.isEmpty {
+            request.setValue(tv.sessionId, forHTTPHeaderField: "X-PS-Session")
+        }
+        request.setValue("\(timestamp)", forHTTPHeaderField: "X-PS-Timestamp")
+        request.setValue(String(nonce), forHTTPHeaderField: "X-PS-Nonce")
+        request.setValue(sigString, forHTTPHeaderField: "X-PS-Signature")
+    }
+
     private func sendStreamToTv(streamUrl: String, title: String, id: String, durationMs: Int64, startPositionMs: Int64 = 0) {
         guard let tv = discovery.connectedTv else {
             showToast("Please pair with your TV first")
@@ -707,7 +749,9 @@ public struct ContentView: View {
             "durationMs": durationMs,
             "startPositionMs": startPositionMs
         ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: dict, options: [])
+        let bodyData = try? JSONSerialization.data(withJSONObject: dict, options: [])
+        request.httpBody = bodyData
+        attachAuthHeaders(to: &request, method: "POST", path: "/play", bodyData: bodyData)
 
         URLSession.shared.dataTask(with: request) { _, response, error in
             DispatchQueue.main.async {
@@ -729,6 +773,14 @@ public struct ContentView: View {
         guard let tv = discovery.connectedTv else { return }
         guard let url = URL(string: "http://\(tv.ip):\(tv.port)/control") else { return }
 
+        DispatchQueue.main.async {
+            if action.uppercased() == "PAUSE" {
+                self.tvIsPlaying = false
+            } else if action.uppercased() == "PLAY" || action.uppercased() == "RESUME" {
+                self.tvIsPlaying = true
+            }
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -737,8 +789,66 @@ public struct ContentView: View {
             "action": action,
             "positionMs": positionMs
         ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: dict, options: [])
-        URLSession.shared.dataTask(with: request).resume()
+        let bodyData = try? JSONSerialization.data(withJSONObject: dict, options: [])
+        request.httpBody = bodyData
+        attachAuthHeaders(to: &request, method: "POST", path: "/control", bodyData: bodyData)
+        URLSession.shared.dataTask(with: request) { _, _, _ in
+            self.syncTvPlaybackStatusOnce()
+        }.resume()
+    }
+
+    private func syncTvPlaybackStatusOnce() {
+        guard let tv = discovery.connectedTv else { return }
+        guard let url = URL(string: "http://\(tv.ip):\(tv.port)/status") else { return }
+
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            guard let data = data,
+                  let json = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any] else {
+                return
+            }
+            let isPlaying = json["isPlaying"] as? Bool ?? false
+            let pos = (json["positionMs"] as? NSNumber)?.int64Value ?? 0
+            let len = (json["durationMs"] as? NSNumber)?.int64Value ?? 0
+            let title = json["title"] as? String ?? ""
+            let streamUrl = json["streamUrl"] as? String ?? ""
+            let sessionId = json["sessionId"] as? String ?? ""
+            let connectedPhoneIp = json["connectedPhoneIp"] as? String ?? ""
+            let localIp = NetworkUtils.getLocalWifiIpAddress()
+
+            if !tv.sessionId.isEmpty && !sessionId.isEmpty && sessionId != tv.sessionId {
+                DispatchQueue.main.async {
+                    self.discovery.disconnectTv()
+                    self.isNowPlayingVisible = false
+                    self.statusPollingTimer?.invalidate()
+                    self.showToast("TV disconnected")
+                }
+                return
+            }
+
+            if !connectedPhoneIp.isEmpty && connectedPhoneIp != localIp && connectedPhoneIp != "127.0.0.1" && localIp != "127.0.0.1" {
+                DispatchQueue.main.async {
+                    self.discovery.disconnectTv()
+                    self.isNowPlayingVisible = false
+                    self.statusPollingTimer?.invalidate()
+                    self.showToast("TV disconnected")
+                }
+                return
+            }
+
+            DispatchQueue.main.async {
+                self.tvIsPlaying = isPlaying
+                self.tvCurrentPosMs = pos
+                if len > 0 {
+                    self.tvTotalDurationMs = len
+                }
+                if !title.isEmpty && self.activeStreamTitle.isEmpty {
+                    self.activeStreamTitle = title
+                }
+                if isPlaying || (pos > 0 && !streamUrl.isEmpty) {
+                    self.isNowPlayingVisible = true
+                }
+            }
+        }.resume()
     }
 
     private func stopStreaming() {
@@ -752,26 +862,7 @@ public struct ContentView: View {
     private func startStatusPolling() {
         statusPollingTimer?.invalidate()
         statusPollingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            guard let tv = discovery.connectedTv else { return }
-            guard let url = URL(string: "http://\(tv.ip):\(tv.port)/status") else { return }
-
-            URLSession.shared.dataTask(with: url) { data, response, _ in
-                guard let data = data,
-                      let json = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any] else {
-                    return
-                }
-                let isPlaying = json["isPlaying"] as? Bool ?? false
-                let pos = (json["positionMs"] as? NSNumber)?.int64Value ?? 0
-                let len = (json["durationMs"] as? NSNumber)?.int64Value ?? 0
-
-                DispatchQueue.main.async {
-                    tvIsPlaying = isPlaying
-                    tvCurrentPosMs = pos
-                    if len > 0 {
-                        tvTotalDurationMs = len
-                    }
-                }
-            }.resume()
+            self.syncTvPlaybackStatusOnce()
         }
     }
 

@@ -131,7 +131,7 @@ public class PocketHttpServer: ObservableObject {
         }
 
         if method == "OPTIONS" {
-            sendResponse(connection: connection, status: "200 OK", headers: ["Content-Length": "0"], body: Data())
+            sendResponse(connection: connection, status: "405 Method Not Allowed", headers: ["Content-Length": "0"], body: Data())
             return
         }
 
@@ -139,13 +139,15 @@ public class PocketHttpServer: ObservableObject {
         case "/api/v1/status":
             handleStatus(connection: connection)
         case "/api/v1/library":
-            handleLibrary(connection: connection)
+            handleLibrary(headers: headers, connection: connection)
         case "/api/v1/transcode/status":
             handleTranscodeStatus(queryString: queryString, connection: connection)
         case "/api/v1/play":
-            handlePlay(postBody: postBody, connection: connection)
+            handlePlay(postBody: postBody, headers: headers, connection: connection)
         case "/api/v1/stop":
             handleStop(connection: connection)
+        case "/disconnect", "/api/v1/disconnect":
+            handleDisconnect(connection: connection)
         case "/api/v1/transcode/seek":
             handleTranscodeSeek(postBody: postBody, connection: connection)
         default:
@@ -189,7 +191,17 @@ public class PocketHttpServer: ObservableObject {
         sendResponse(connection: connection, status: "404 Not Found", headers: [:], body: "Thumbnail not found".data(using: .utf8) ?? Data())
     }
 
-    private func handleLibrary(connection: NWConnection) {
+    private func handleLibrary(headers: [String: String], connection: NWConnection) {
+        if let tvIp = headers["x-ps-tv-ip"], !tvIp.isEmpty {
+            let tvPort = Int(headers["x-ps-tv-port"] ?? "") ?? 8085
+            let tvName = headers["x-ps-tv-name"] ?? "PocketStream TV"
+            let sessionId = headers["x-ps-tv-sid"] ?? ""
+            let sessionKey = headers["x-ps-tv-key"] ?? ""
+            DispatchQueue.main.async {
+                let info = TvInfo(ip: tvIp, port: tvPort, name: tvName, sessionId: sessionId, sessionKey: sessionKey)
+                MobileDiscoveryManager.shared.connectToTv(info: info)
+            }
+        }
         let items = MediaRepository.shared.getAllMediaItems().map { $0.toDictionary() }
         if let json = try? JSONSerialization.data(withJSONObject: items, options: []) {
             sendResponse(connection: connection, status: "200 OK", headers: ["Content-Type": "application/json"], body: json)
@@ -220,7 +232,7 @@ public class PocketHttpServer: ObservableObject {
         }
     }
 
-    private func handlePlay(postBody: String, connection: NWConnection) {
+    private func handlePlay(postBody: String, headers: [String: String], connection: NWConnection) {
         guard let data = postBody.data(using: .utf8),
               let json = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any],
               let mediaId = json["mediaId"] as? String,
@@ -229,11 +241,24 @@ public class PocketHttpServer: ObservableObject {
             return
         }
 
+        let tvIp = (json["tvIp"] as? String) ?? headers["x-ps-tv-ip"] ?? ""
+        if !tvIp.isEmpty {
+            let tvPort = (json["tvPort"] as? Int) ?? Int(headers["x-ps-tv-port"] ?? "") ?? 8085
+            let tvName = (json["tvName"] as? String) ?? headers["x-ps-tv-name"] ?? "PocketStream TV"
+            let sessionId = (json["sessionId"] as? String) ?? headers["x-ps-tv-sid"] ?? ""
+            let sessionKey = (json["sessionKey"] as? String) ?? headers["x-ps-tv-key"] ?? ""
+            DispatchQueue.main.async {
+                let info = TvInfo(ip: tvIp, port: tvPort, name: tvName, sessionId: sessionId, sessionKey: sessionKey)
+                MobileDiscoveryManager.shared.connectToTv(info: info)
+            }
+        }
+
         let ip = NetworkUtils.getLocalWifiIpAddress()
         let isAlreadyTranscoded = TranscoderManager.shared.getTranscodedFile(id: media.id) != nil
+        let requestedMode = (json["mode"] as? String)?.lowercased() ?? "direct"
 
         var resJson: [String: Any] = [:]
-        if media.is10Bit && !isAlreadyTranscoded {
+        if requestedMode == "transcode" && !isAlreadyTranscoded {
             let streamUrl = "http://\(ip):\(port)/stream/live/\(media.id)"
             TranscoderManager.shared.startLiveTranscode(media: media, onReadyToStream: { _ in })
             resJson["status"] = "ok"
@@ -246,6 +271,7 @@ public class PocketHttpServer: ObservableObject {
                 self.onPlaybackStarted?(media.id, "[Converted] \(media.title)", media.durationMs)
             }
         } else {
+            // Direct Play is preferred in all scenarios (ADR-001)
             let streamUrl = isAlreadyTranscoded ? "http://\(ip):\(port)/stream/transcoded/\(media.id)" : "http://\(ip):\(port)/stream/\(media.id)"
             resJson["status"] = "ok"
             resJson["mode"] = "direct"
@@ -268,6 +294,17 @@ public class PocketHttpServer: ObservableObject {
             self.onPlaybackStopped?()
         }
         let dict = ["status": "stopped"]
+        if let json = try? JSONSerialization.data(withJSONObject: dict, options: []) {
+            sendResponse(connection: connection, status: "200 OK", headers: ["Content-Type": "application/json"], body: json)
+        }
+    }
+
+    private func handleDisconnect(connection: NWConnection) {
+        DispatchQueue.main.async {
+            MobileDiscoveryManager.shared.disconnectTv()
+            self.onPlaybackStopped?()
+        }
+        let dict = ["status": "ok"]
         if let json = try? JSONSerialization.data(withJSONObject: dict, options: []) {
             sendResponse(connection: connection, status: "200 OK", headers: ["Content-Type": "application/json"], body: json)
         }
@@ -326,43 +363,119 @@ public class PocketHttpServer: ObservableObject {
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
 
         if let rangeHeader = headers["range"], rangeHeader.hasPrefix("bytes=") {
-            let rangeSpec = rangeHeader.replacingOccurrences(of: "bytes=", with: "")
+            let rangeSpec = rangeHeader.replacingOccurrences(of: "bytes=", with: "").trimmingCharacters(in: .whitespaces)
             let parts = rangeSpec.components(separatedBy: "-")
             let start = Int64(parts[0]) ?? 0
             let end = (parts.count > 1 && !parts[1].isEmpty) ? (Int64(parts[1]) ?? (fileSize - 1)) : (fileSize - 1)
-            let chunkLength = max(0, min(end - start + 1, fileSize - start))
 
-            fileHandle.seek(toFileOffset: UInt64(start))
-            let chunk = fileHandle.readData(ofLength: Int(chunkLength))
-            fileHandle.closeFile()
+            if start > end || start >= fileSize {
+                try? fileHandle.close()
+                var respHeaders: [String: String] = [
+                    "Content-Range": "bytes */\(fileSize)",
+                    "Content-Length": "0"
+                ]
+                sendResponse(connection: connection, status: "416 Range Not Satisfiable", headers: respHeaders, body: Data())
+                return
+            }
+
+            let boundedEnd = min(end, fileSize - 1)
+            let rangeLength = boundedEnd - start + 1
+
+            do {
+                try fileHandle.seek(toOffset: UInt64(start))
+            } catch {
+                try? fileHandle.close()
+                sendResponse(connection: connection, status: "500 Internal Server Error", headers: [:], body: Data())
+                return
+            }
 
             var respHeaders: [String: String] = [
                 "Content-Type": mimeType,
                 "Accept-Ranges": "bytes",
-                "Content-Range": "bytes \(start)-\(start + Int64(chunk.count) - 1)/\(fileSize)",
-                "Content-Length": "\(chunk.count)"
+                "Content-Range": "bytes \(start)-\(boundedEnd)/\(fileSize)",
+                "Content-Length": "\(rangeLength)"
             ]
-            sendResponse(connection: connection, status: "206 Partial Content", headers: respHeaders, body: chunk)
-        } else {
-            // First 1MB chunk to begin playback instantly
-            let initialChunkSize = min(Int64(2 * 1024 * 1024), fileSize)
-            let chunk = fileHandle.readData(ofLength: Int(initialChunkSize))
-            fileHandle.closeFile()
 
-            let respHeaders: [String: String] = [
+            sendHeadersAndStream(fileHandle: fileHandle, remainingLength: rangeLength, status: "206 Partial Content", headers: respHeaders, connection: connection)
+        } else {
+            var respHeaders: [String: String] = [
                 "Content-Type": mimeType,
                 "Accept-Ranges": "bytes",
                 "Content-Length": "\(fileSize)"
             ]
-            sendResponse(connection: connection, status: "200 OK", headers: respHeaders, body: chunk)
+
+            sendHeadersAndStream(fileHandle: fileHandle, remainingLength: fileSize, status: "200 OK", headers: respHeaders, connection: connection)
         }
+    }
+
+    private func sendHeadersAndStream(fileHandle: FileHandle, remainingLength: Int64, status: String, headers: [String: String], connection: NWConnection) {
+        var headerStr = "HTTP/1.1 \(status)\r\n"
+        headerStr += "Connection: close\r\n"
+
+        for (k, v) in headers {
+            headerStr += "\(k): \(v)\r\n"
+        }
+        headerStr += "\r\n"
+
+        guard let headerData = headerStr.data(using: .utf8) else {
+            try? fileHandle.close()
+            connection.cancel()
+            return
+        }
+
+        connection.send(content: headerData, isComplete: false, completion: .contentProcessed({ [weak self] error in
+            if let _ = error {
+                try? fileHandle.close()
+                connection.cancel()
+                return
+            }
+            self?.streamNextChunk(fileHandle: fileHandle, remainingLength: remainingLength, connection: connection)
+        }))
+    }
+
+    private func streamNextChunk(fileHandle: FileHandle, remainingLength: Int64, connection: NWConnection) {
+        guard remainingLength > 0 else {
+            try? fileHandle.close()
+            connection.cancel()
+            return
+        }
+
+        let chunkSize = Int(min(Int64(256 * 1024), remainingLength)) // 256 KB bounded read window
+        let chunkData: Data
+        do {
+            chunkData = try fileHandle.read(upToCount: chunkSize) ?? Data()
+        } catch {
+            try? fileHandle.close()
+            connection.cancel()
+            return
+        }
+
+        if chunkData.isEmpty {
+            try? fileHandle.close()
+            connection.cancel()
+            return
+        }
+
+        let newRemaining = remainingLength - Int64(chunkData.count)
+        let isDone = (newRemaining <= 0)
+
+        connection.send(content: chunkData, isComplete: isDone, completion: .contentProcessed({ [weak self] error in
+            if let _ = error {
+                try? fileHandle.close()
+                connection.cancel()
+                return
+            }
+            if isDone {
+                try? fileHandle.close()
+                connection.cancel()
+            } else {
+                self?.streamNextChunk(fileHandle: fileHandle, remainingLength: newRemaining, connection: connection)
+            }
+        }))
     }
 
     private func sendResponse(connection: NWConnection, status: String, headers: [String: String], body: Data) {
         var headerStr = "HTTP/1.1 \(status)\r\n"
-        headerStr += "Access-Control-Allow-Origin: *\r\n"
-        headerStr += "Access-Control-Allow-Methods: GET, POST, HEAD, OPTIONS\r\n"
-        headerStr += "Access-Control-Allow-Headers: Range, Content-Type, Accept\r\n"
         headerStr += "Connection: close\r\n"
 
         for (k, v) in headers {

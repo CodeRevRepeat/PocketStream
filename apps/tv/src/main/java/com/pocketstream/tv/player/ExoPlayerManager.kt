@@ -100,6 +100,17 @@ class ExoPlayerManager(
                 }
             }
 
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                val isPlaying = player.isPlaying
+                val current = player.currentPosition.coerceAtLeast(0L)
+                val duration = if (player.duration > 0L) player.duration else 0L
+                onPlaybackStateChange(isPlaying, current, duration)
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 Log.i(TAG, "ExoPlayer onIsPlayingChanged: $isPlaying")
                 val current = player.currentPosition.coerceAtLeast(0L)
@@ -156,14 +167,25 @@ class ExoPlayerManager(
         } else {
             player.play()
         }
+        val current = player.currentPosition.coerceAtLeast(0L)
+        val duration = if (player.duration > 0L) player.duration else 0L
+        onPlaybackStateChange(player.isPlaying, current, duration)
     }
 
     fun pause() {
-        exoPlayer?.pause()
+        val player = exoPlayer ?: return
+        player.pause()
+        val current = player.currentPosition.coerceAtLeast(0L)
+        val duration = if (player.duration > 0L) player.duration else 0L
+        onPlaybackStateChange(false, current, duration)
     }
 
     fun resume() {
-        exoPlayer?.play()
+        val player = exoPlayer ?: return
+        player.play()
+        val current = player.currentPosition.coerceAtLeast(0L)
+        val duration = if (player.duration > 0L) player.duration else 0L
+        onPlaybackStateChange(true, current, duration)
     }
 
     fun seekRelative(deltaMs: Long) {
@@ -177,6 +199,8 @@ class ExoPlayerManager(
         val target = (current + deltaMs).coerceIn(0L, total)
         Log.i(TAG, "seekRelative: delta=$deltaMs ms, cur=$current ms -> target=$target ms (isSeekable=${player.isCurrentMediaItemSeekable})")
         player.seekTo(target)
+        val duration = if (player.duration > 0L) player.duration else 0L
+        onPlaybackStateChange(player.isPlaying, target, duration)
     }
 
     fun seekTo(positionMs: Long) {
@@ -188,6 +212,8 @@ class ExoPlayerManager(
             return
         }
         player.seekTo(safePos)
+        val duration = if (player.duration > 0L) player.duration else 0L
+        onPlaybackStateChange(player.isPlaying, safePos, duration)
     }
 
     fun getAudioTracks(): List<AudioTrackInfo> {
