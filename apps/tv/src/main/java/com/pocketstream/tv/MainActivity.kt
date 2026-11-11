@@ -230,13 +230,13 @@ class MainActivity : AppCompatActivity() {
                 getConnectedPhoneIp = { getConnectedPhoneIp() },
                 getSessionKey = { tvSessionKey },
                 getSessionId = { tvSessionId },
-                onPlayRequested = { streamUrl, title, durationMs, startPositionMs ->
+                onPlayRequested = { streamUrl, title, durationMs, startPositionMs, audioUrl ->
                     runOnUiThread {
                         val bringToFront = Intent(this@MainActivity, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         }
                         startActivity(bringToFront)
-                        startPlayback(streamUrl, title, durationMs, startPositionMs)
+                        startPlayback(streamUrl, title, durationMs, startPositionMs, audioUrl)
                     }
                 },
                 onControlRequested = { action, pos ->
@@ -867,7 +867,8 @@ class MainActivity : AppCompatActivity() {
         streamUrl: String,
         title: String,
         durationMs: Long = 0L,
-        startPositionMs: Long = 0L
+        startPositionMs: Long = 0L,
+        audioUrl: String? = null
     ) {
         dismissTvPreparing()
         currentStreamUrl = streamUrl
@@ -896,7 +897,7 @@ class MainActivity : AppCompatActivity() {
         binding.layoutAudioTrackDropUp.visibility = View.GONE
         availableAudioTracks = emptyList()
 
-        playerManager?.play(streamUrl, startPositionMs)
+        playerManager?.play(streamUrl, startPositionMs, audioUrl)
         showOsd()
         binding.btnPlayerPlayPause.requestFocus()
     }

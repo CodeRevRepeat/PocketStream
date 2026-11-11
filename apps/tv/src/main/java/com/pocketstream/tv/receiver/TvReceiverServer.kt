@@ -18,7 +18,7 @@ class TvReceiverServer(
     private val getConnectedPhoneIp: () -> String?,
     private val getSessionKey: () -> String = { "" },
     private val getSessionId: () -> String = { "" },
-    private val onPlayRequested: (streamUrl: String, title: String, durationMs: Long, startPositionMs: Long) -> Unit,
+    private val onPlayRequested: (streamUrl: String, title: String, durationMs: Long, startPositionMs: Long, audioUrl: String?) -> Unit,
     private val onControlRequested: (action: String, positionMs: Long) -> Unit,
     private val getPlaybackStatus: () -> TvPlaybackInfo,
     private val onPairRequested: (phoneIp: String, phonePort: Int, deviceName: String) -> Unit = { _, _, _ -> },
@@ -231,7 +231,8 @@ class TvReceiverServer(
                     val title = json.optString("title", "PocketStream Video")
                     val durationMs = json.optLong("durationMs", 0L)
                     val startPositionMs = json.optLong("startPositionMs", 0L)
-                    onPlayRequested(streamUrl, title, durationMs, startPositionMs)
+                    val audioUrl = json.optString("audioUrl", "").ifEmpty { null }
+                    onPlayRequested(streamUrl, title, durationMs, startPositionMs, audioUrl)
                     newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
                 } catch (e: Exception) {
                     newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid JSON: ${e.message}")

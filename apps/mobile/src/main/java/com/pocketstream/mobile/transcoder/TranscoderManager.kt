@@ -62,7 +62,8 @@ object TranscoderManager {
                 if (f.name.startsWith("transcoded_") && f.name.endsWith(".mp4")) {
                     val id = f.name.removePrefix("transcoded_").removeSuffix(".mp4")
                     val doneMarker = File(context.cacheDir, "transcoded_$id.done")
-                    if (!hasAudioTrack(f)) {
+                    val noAudioMarker = File(context.cacheDir, "transcoded_$id.noaudio")
+                    if (!hasAudioTrack(f) && !noAudioMarker.exists()) {
                         Log.i(TAG, "Purging stale silent cached transcode: ${f.name}")
                         f.delete()
                         doneMarker.delete()
@@ -77,8 +78,9 @@ object TranscoderManager {
         val cached = completedFiles[id]
         if (cached != null && cached.exists() && cached.length() > 0) {
             val marker = File(context.cacheDir, "transcoded_$id.done")
+            val noAudioMarker = File(context.cacheDir, "transcoded_$id.noaudio")
             if (marker.exists()) {
-                if (!hasAudioTrack(cached)) {
+                if (!hasAudioTrack(cached) && !noAudioMarker.exists()) {
                     Log.w(TAG, "Cached transcoded file $id has no audio track. Deleting stale silent cache.")
                     cached.delete()
                     marker.delete()
@@ -90,10 +92,11 @@ object TranscoderManager {
         }
         val file = File(context.cacheDir, "transcoded_$id.mp4")
         val doneMarker = File(context.cacheDir, "transcoded_$id.done")
+        val noAudioMarker = File(context.cacheDir, "transcoded_$id.noaudio")
         
         // ONLY valid if BOTH the mp4 and the .done completion marker exist!
         if (file.exists() && doneMarker.exists() && file.length() > 0) {
-            if (!hasAudioTrack(file)) {
+            if (!hasAudioTrack(file) && !noAudioMarker.exists()) {
                 Log.w(TAG, "Cached transcoded file $id has no audio track. Deleting stale silent cache.")
                 file.delete()
                 doneMarker.delete()
@@ -228,8 +231,10 @@ object TranscoderManager {
             completedFiles.remove(media.id)
             val outputFile = File(context.cacheDir, "transcoded_${media.id}.mp4")
             val doneMarker = File(context.cacheDir, "transcoded_${media.id}.done")
+            val noAudioMarker = File(context.cacheDir, "transcoded_${media.id}.noaudio")
             if (outputFile.exists()) outputFile.delete()
             if (doneMarker.exists()) doneMarker.delete()
+            if (noAudioMarker.exists()) noAudioMarker.delete()
         } else {
             val existing = getTranscodedFile(context, media.id)
             if (existing != null) {
@@ -251,11 +256,15 @@ object TranscoderManager {
 
         val outputFile = File(context.cacheDir, "transcoded_${media.id}.mp4")
         val doneMarker = File(context.cacheDir, "transcoded_${media.id}.done")
+        val noAudioMarker = File(context.cacheDir, "transcoded_${media.id}.noaudio")
         if (outputFile.exists() && !isTranscoding(media.id)) {
             outputFile.delete()
         }
         if (doneMarker.exists()) {
             doneMarker.delete()
+        }
+        if (noAudioMarker.exists()) {
+            noAudioMarker.delete()
         }
 
         val handler = Handler(Looper.getMainLooper())
@@ -324,6 +333,9 @@ object TranscoderManager {
                     if (startPositionMs == 0L) {
                         try {
                             File(context.cacheDir, "transcoded_${media.id}.done").createNewFile()
+                            if (forceRemoveAudio) {
+                                File(context.cacheDir, "transcoded_${media.id}.noaudio").createNewFile()
+                            }
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to create .done marker: ${e.message}")
                         }
@@ -455,8 +467,10 @@ object TranscoderManager {
                 for (id in activeIds) {
                     val partialFile = File(context.cacheDir, "transcoded_$id.mp4")
                     val doneMarker = File(context.cacheDir, "transcoded_$id.done")
+                    val noAudioMarker = File(context.cacheDir, "transcoded_$id.noaudio")
                     if (!doneMarker.exists() && partialFile.exists()) {
                         partialFile.delete()
+                        if (noAudioMarker.exists()) noAudioMarker.delete()
                     }
                 }
             }
@@ -573,6 +587,7 @@ object TranscoderManager {
                 if (name.startsWith("transcoded_") || 
                     name.endsWith(".mp4") || 
                     name.endsWith(".done") || 
+                    name.endsWith(".noaudio") || 
                     name.endsWith(".tmp") || 
                     name.startsWith("temp_")) {
                     val len = f.length()
@@ -607,6 +622,8 @@ object TranscoderManager {
                     val doneMarker = File(context.cacheDir, "transcoded_$id.done")
                     if (f.delete()) {
                         doneMarker.delete()
+                        val noAudioMarker = File(context.cacheDir, "transcoded_$id.noaudio")
+                        if (noAudioMarker.exists()) noAudioMarker.delete()
                         completedFiles.remove(id)
                         totalSize -= len
                         if (totalSize <= MAX_CACHE_SIZE_BYTES / 2 && stat.availableBytes >= lowStorageThreshold) break

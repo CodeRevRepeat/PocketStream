@@ -34,6 +34,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.pocketstream.mobile.discovery.MobileDiscoveryManager
 import com.pocketstream.protocol.TvCapabilities
 import com.pocketstream.protocol.TvInfo
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -769,7 +770,9 @@ class MainActivity : AppCompatActivity() {
         val isAlreadyTranscoded = TranscoderManager.getTranscodedFile(this, localMedia.id) != null
         if (isAlreadyTranscoded) {
             val transcodedUrl = "http://$localIp:${ServerService.serverPort}/stream/transcoded/${localMedia.id}"
-            sendStreamToTv(transcodedUrl, "[Converted] ${localMedia.title}", localMedia.id, localMedia.durationMs)
+            val noAudioMarker = File(cacheDir, "transcoded_${localMedia.id}.noaudio")
+            val audioUrl = if (noAudioMarker.exists()) "http://$localIp:${ServerService.serverPort}/stream/${localMedia.id}" else null
+            sendStreamToTv(transcodedUrl, "[Converted] ${localMedia.title}", localMedia.id, localMedia.durationMs, audioUrl = audioUrl)
             return
         }
 
@@ -795,7 +798,9 @@ class MainActivity : AppCompatActivity() {
         val isAlreadyTranscoded = TranscoderManager.getTranscodedFile(this, media.id) != null
         if (isAlreadyTranscoded) {
             val transcodedUrl = "http://$localIp:${ServerService.serverPort}/stream/transcoded/${media.id}"
-            sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, media.durationMs)
+            val noAudioMarker = File(cacheDir, "transcoded_${media.id}.noaudio")
+            val audioUrl = if (noAudioMarker.exists()) "http://$localIp:${ServerService.serverPort}/stream/${media.id}" else null
+            sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, media.durationMs, audioUrl = audioUrl)
             return
         }
 
@@ -868,11 +873,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val duration = media.durationMs
+
+        // Check hardware audio support for the selected media file
+        val audioTracks = TranscoderManager.getAudioTrackInfos(applicationContext, media.uri)
+        val primaryAudioMime = audioTracks.firstOrNull()?.mimeType ?: media.audioCodec
+        val canDecodeAudio = TranscoderManager.canDeviceDecodeAudio(primaryAudioMime)
+        val forceRemoveAudio = !canDecodeAudio
+        val audioUrlToSend = if (forceRemoveAudio) "http://$localIp:${ServerService.serverPort}/stream/${media.id}" else null
+
         if (startPositionMs == 0L) {
             val existing = TranscoderManager.getTranscodedFile(this, media.id)
             if (existing != null) {
                 val transcodedUrl = "http://$localIp:${ServerService.serverPort}/stream/transcoded/${media.id}"
-                sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, duration)
+                val noAudioMarker = File(cacheDir, "transcoded_${media.id}.noaudio")
+                val audioUrl = if (noAudioMarker.exists() || !canDecodeAudio) "http://$localIp:${ServerService.serverPort}/stream/${media.id}" else null
+                sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, duration, audioUrl = audioUrl)
                 return
             }
         }
@@ -921,6 +936,7 @@ class MainActivity : AppCompatActivity() {
             context = applicationContext,
             media = media,
             startPositionMs = startPositionMs,
+            forceRemoveAudio = forceRemoveAudio,
             onReadyToStream = {
                 // Background chunks buffering
             },
@@ -933,7 +949,7 @@ class MainActivity : AppCompatActivity() {
                 if (startPositionMs == 0L && activeStreamingMediaId == media.id) {
                     val currentPos = tvCurrentPosMs
                     val transcodedUrl = "http://$localIp:${ServerService.serverPort}/stream/transcoded/${media.id}"
-                    sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, duration, startPositionMs = currentPos)
+                    sendStreamToTv(transcodedUrl, "[Converted] ${media.title}", media.id, duration, startPositionMs = currentPos, audioUrl = audioUrlToSend)
                 }
             },
             onError = { err ->
@@ -966,7 +982,7 @@ class MainActivity : AppCompatActivity() {
                     liveUrl
                 }
                 val streamTitle = if (readyFile != null) "[Converted] ${media.title}" else "[Live 8-bit] ${media.title}"
-                sendStreamToTv(urlToSend, streamTitle, media.id, duration, startPositionMs = startPositionMs)
+                sendStreamToTv(urlToSend, streamTitle, media.id, duration, startPositionMs = startPositionMs, audioUrl = audioUrlToSend)
             }
         }
     }
@@ -1019,7 +1035,8 @@ class MainActivity : AppCompatActivity() {
         title: String,
         id: String,
         durationMs: Long = 0L,
-        startPositionMs: Long = 0L
+        startPositionMs: Long = 0L,
+        audioUrl: String? = null
     ) {
         val tvIp = resolvedTvIp()
         if (tvIp.isEmpty()) {
@@ -1039,6 +1056,9 @@ class MainActivity : AppCompatActivity() {
                     put("id", id)
                     put("durationMs", durationMs)
                     put("startPositionMs", startPositionMs)
+                    if (!audioUrl.isNullOrEmpty()) {
+                        put("audioUrl", audioUrl)
+                    }
                 }
                 val bodyStr = json.toString()
                 val body = bodyStr.toRequestBody("application/json".toMediaType())

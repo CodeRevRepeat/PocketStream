@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackGroup
@@ -16,6 +17,8 @@ import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.util.EventLogger
 import androidx.media3.ui.PlayerView
 import java.util.Locale
@@ -146,13 +149,25 @@ class ExoPlayerManager(
         exoPlayer = player
     }
 
-    fun play(streamUrl: String, startPositionMs: Long = 0L) {
+    fun play(streamUrl: String, startPositionMs: Long = 0L, audioUrl: String? = null) {
         currentUrl = streamUrl
         val player = exoPlayer ?: return
-        Log.i(TAG, "play: $streamUrl, startPosition: $startPositionMs")
+        Log.i(TAG, "play: streamUrl=$streamUrl, startPosition=$startPositionMs, audioUrl=$audioUrl")
 
-        val mediaItem = MediaItem.fromUri(Uri.parse(streamUrl))
-        player.setMediaItem(mediaItem)
+        if (!audioUrl.isNullOrEmpty()) {
+            val mediaSourceFactory = DefaultMediaSourceFactory(context)
+            val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(Uri.parse(streamUrl)))
+            val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(Uri.parse(audioUrl)))
+            val mergedSource = MergingMediaSource(videoSource, audioSource)
+            player.trackSelectionParameters = player.trackSelectionParameters
+                .buildUpon()
+                .setPreferredVideoMimeType(MimeTypes.VIDEO_H264)
+                .build()
+            player.setMediaSource(mergedSource)
+        } else {
+            val mediaItem = MediaItem.fromUri(Uri.parse(streamUrl))
+            player.setMediaItem(mediaItem)
+        }
         if (startPositionMs > 0L && !streamUrl.contains("/stream/live/")) {
             player.seekTo(startPositionMs)
         }
