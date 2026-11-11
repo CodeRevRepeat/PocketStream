@@ -3,7 +3,9 @@ package com.pocketstream.mobile.transcoder
 import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.os.Handler
 import android.os.Looper
@@ -84,6 +86,51 @@ object TranscoderManager {
 
     fun getProgress(id: String): Int = inProgress[id] ?: 0
 
+    data class AudioTrackInfo(
+        val index: Int,
+        val mimeType: String,
+        val isDecodable: Boolean
+    )
+
+    fun canDeviceDecodeAudio(mimeType: String): Boolean {
+        if (mimeType.isEmpty()) return true
+        return try {
+            val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+            codecList.codecInfos.any { info ->
+                !info.isEncoder && info.supportedTypes.any { it.equals(mimeType, ignoreCase = true) }
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun getAudioTrackInfos(context: Context, uri: android.net.Uri): List<AudioTrackInfo> {
+        val tracks = mutableListOf<AudioTrackInfo>()
+        var extractor: MediaExtractor? = null
+        try {
+            extractor = MediaExtractor()
+            extractor.setDataSource(context, uri, null)
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+                if (mime.startsWith("audio/")) {
+                    tracks.add(
+                        AudioTrackInfo(
+                            index = i,
+                            mimeType = mime,
+                            isDecodable = canDeviceDecodeAudio(mime)
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to inspect audio tracks for $uri: ${e.message}")
+        } finally {
+            try { extractor?.release() } catch (_: Exception) {}
+        }
+        return tracks
+    }
+
     /**
      * Starts fragmented MP4 hardware transcode.
      * Buffers sufficient video chunks (~4MB, ~6-8s of video in ~1.5s with hardware acceleration)
@@ -93,6 +140,7 @@ object TranscoderManager {
         context: Context,
         media: LocalMedia,
         startPositionMs: Long = 0L,
+        forceRemoveAudio: Boolean = false,
         onReadyToStream: (File) -> Unit,
         onProgress: (Int) -> Unit = {},
         onCompleted: (File) -> Unit = {},
@@ -100,7 +148,7 @@ object TranscoderManager {
     ) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             Handler(Looper.getMainLooper()).post {
-                startLiveTranscode(context, media, startPositionMs, onReadyToStream, onProgress, onCompleted, onError)
+                startLiveTranscode(context, media, startPositionMs, forceRemoveAudio, onReadyToStream, onProgress, onCompleted, onError)
             }
             return
         }
@@ -143,6 +191,16 @@ object TranscoderManager {
         val handler = Handler(Looper.getMainLooper())
         inProgress[media.id] = 0
 
+        val audioTracks = getAudioTrackInfos(context, media.uri)
+        val hasAudio = audioTracks.isNotEmpty()
+        val primaryAudioMime = audioTracks.firstOrNull()?.mimeType ?: media.audioCodec
+        val canDecodePrimary = canDeviceDecodeAudio(primaryAudioMime)
+        val hasDecodableAudio = audioTracks.any { it.isDecodable }
+
+        Log.i(TAG, "Transcode audio config for '${media.title}': tracks=${audioTracks.size}, " +
+                "primary=$primaryAudioMime, canDecodePrimary=$canDecodePrimary, " +
+                "hasDecodableAudio=$hasDecodableAudio, forceRemoveAudio=$forceRemoveAudio")
+
         // Fragmented MP4 muxer: writes ftyp/moov immediately and chunks every 1 second
         val muxerFactory = InAppMuxer.Factory.Builder()
             .setFragmentedMp4Enabled(true)
@@ -166,11 +224,23 @@ object TranscoderManager {
             .setEnableFallback(true)
             .build()
 
-        val transformer = Transformer.Builder(context)
+        val transformerBuilder = Transformer.Builder(context)
             .setMuxerFactory(muxerFactory)
             .setEncoderFactory(encoderFactory)
             .setVideoMimeType(MimeTypes.VIDEO_H264)
-            .setAudioMimeType(MimeTypes.AUDIO_AAC)
+
+        // Case A (Snapdragon or phone with decoder for primary audio format):
+        // Preserves 100% existing Snapdragon behavior by transcoding audio to pristine AAC.
+        // Step 2: Multi-track fallback - if primary is undecodable on this chipset but a decodable audio track exists (e.g. AAC), transcode to AAC.
+        if (!forceRemoveAudio && hasAudio && (canDecodePrimary || hasDecodableAudio)) {
+            transformerBuilder.setAudioMimeType(MimeTypes.AUDIO_AAC)
+        } else {
+            // Step 1: Smart Passthrough - phone lacks an audio decoder for this format (e.g. MediaTek Helio G95 with E-AC-3).
+            // Do NOT force AAC encoding! Transformer will attempt direct audio passthrough (transmuxing) without decoding.
+            Log.i(TAG, "Smart audio passthrough engaged (no AAC audio transcode forced)")
+        }
+
+        val transformer = transformerBuilder
             .addListener(object : Transformer.Listener {
                 override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                     sanitizeAvcLevel(outputFile)
@@ -211,6 +281,31 @@ object TranscoderManager {
                         outputFile.delete()
                     }
                     File(context.cacheDir, "transcoded_${media.id}.done").delete()
+
+                    val err = exportException.message ?: ""
+                    val isAudioDecoderError = err.contains("AudioDecoder", ignoreCase = true) ||
+                            exportException.errorCode == ExportException.ERROR_CODE_DECODER_INIT_FAILED
+
+                    // Auto-resilience: If the phone completely lacks an audio decoder for this track
+                    // and container cannot transmux it, automatically fall back to transcoding video
+                    // so playback on TV succeeds smoothly instead of aborting with an error popup!
+                    if (isAudioDecoderError && !forceRemoveAudio) {
+                        Log.w(TAG, "Audio decoding unsupported on device chipset ($err). Automatically falling back to video stream...")
+                        handler.post {
+                            startLiveTranscode(
+                                context = context,
+                                media = media,
+                                startPositionMs = startPositionMs,
+                                forceRemoveAudio = true,
+                                onReadyToStream = onReadyToStream,
+                                onProgress = onProgress,
+                                onCompleted = onCompleted,
+                                onError = onError
+                            )
+                        }
+                        return
+                    }
+
                     handler.post {
                         onError(exportException.message ?: "Transcoding failed")
                     }
@@ -234,11 +329,17 @@ object TranscoderManager {
                 Media3Item.fromUri(media.uri)
             }
 
-            val editedMediaItem = androidx.media3.transformer.EditedMediaItem.Builder(inputMediaItem).build()
-            val sequence = androidx.media3.transformer.EditedMediaItemSequence(editedMediaItem)
-            val composition = Composition.Builder(sequence)
-                .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_MEDIACODEC)
+            val editedMediaItem = androidx.media3.transformer.EditedMediaItem.Builder(inputMediaItem)
+                .setRemoveAudio(forceRemoveAudio || !hasAudio)
                 .build()
+            val sequence = androidx.media3.transformer.EditedMediaItemSequence(editedMediaItem)
+            val compBuilder = Composition.Builder(sequence)
+                .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_MEDIACODEC)
+
+            if (!forceRemoveAudio && hasAudio && !canDecodePrimary) {
+                compBuilder.setTransmuxAudio(true)
+            }
+            val composition = compBuilder.build()
 
             transformer.start(composition, outputFile.absolutePath)
 

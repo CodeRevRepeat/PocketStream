@@ -307,6 +307,7 @@ object MediaRepository {
         var width = 0
         var height = 0
         var detectedVideoCodec = ""
+        var detectedAudioCodec = ""
         val mmr = MediaMetadataRetriever()
         try {
             mmr.setDataSource(context, uri)
@@ -373,7 +374,7 @@ object MediaRepository {
             for (i in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(i)
                 val trackMime = format.getString(android.media.MediaFormat.KEY_MIME) ?: ""
-                if (trackMime.startsWith("video/")) {
+                if (trackMime.startsWith("video/") && detectedVideoCodec.isEmpty()) {
                     detectedVideoCodec = trackMime
                     if (width <= 0 && format.containsKey(android.media.MediaFormat.KEY_WIDTH)) {
                         width = format.getInteger(android.media.MediaFormat.KEY_WIDTH)
@@ -436,7 +437,8 @@ object MediaRepository {
                     if (format.containsKey("bit-depth") && format.getInteger("bit-depth") > 8) {
                         is10Bit = true
                     }
-                    break
+                } else if (trackMime.startsWith("audio/") && detectedAudioCodec.isEmpty()) {
+                    detectedAudioCodec = trackMime
                 }
             }
         } catch (_: Exception) {
@@ -454,6 +456,7 @@ object MediaRepository {
             width = width,
             height = height,
             videoCodec = detectedVideoCodec,
+            audioCodec = detectedAudioCodec,
             is10Bit = is10Bit
         )
     }
