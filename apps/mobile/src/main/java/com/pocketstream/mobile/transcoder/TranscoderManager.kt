@@ -35,17 +35,71 @@ object TranscoderManager {
     private val completedFiles = ConcurrentHashMap<String, File>()
     private val inProgress = ConcurrentHashMap<String, Int>()
 
+    fun hasAudioTrack(file: File): Boolean {
+        if (!file.exists() || file.length() < 1024) return false
+        var extractor: MediaExtractor? = null
+        try {
+            extractor = MediaExtractor()
+            extractor.setDataSource(file.absolutePath)
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+                if (mime.startsWith("audio/")) {
+                    return true
+                }
+            }
+        } catch (_: Exception) {
+        } finally {
+            try { extractor?.release() } catch (_: Exception) {}
+        }
+        return false
+    }
+
+    fun purgeStaleSilentCache(context: Context) {
+        try {
+            val cacheFiles = context.cacheDir.listFiles() ?: return
+            for (f in cacheFiles) {
+                if (f.name.startsWith("transcoded_") && f.name.endsWith(".mp4")) {
+                    val id = f.name.removePrefix("transcoded_").removeSuffix(".mp4")
+                    val doneMarker = File(context.cacheDir, "transcoded_$id.done")
+                    if (!hasAudioTrack(f)) {
+                        Log.i(TAG, "Purging stale silent cached transcode: ${f.name}")
+                        f.delete()
+                        doneMarker.delete()
+                        completedFiles.remove(id)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
     fun getTranscodedFile(context: Context, id: String): File? {
         val cached = completedFiles[id]
         if (cached != null && cached.exists() && cached.length() > 0) {
             val marker = File(context.cacheDir, "transcoded_$id.done")
-            if (marker.exists()) return cached
+            if (marker.exists()) {
+                if (!hasAudioTrack(cached)) {
+                    Log.w(TAG, "Cached transcoded file $id has no audio track. Deleting stale silent cache.")
+                    cached.delete()
+                    marker.delete()
+                    completedFiles.remove(id)
+                } else {
+                    return cached
+                }
+            }
         }
         val file = File(context.cacheDir, "transcoded_$id.mp4")
         val doneMarker = File(context.cacheDir, "transcoded_$id.done")
         
         // ONLY valid if BOTH the mp4 and the .done completion marker exist!
         if (file.exists() && doneMarker.exists() && file.length() > 0) {
+            if (!hasAudioTrack(file)) {
+                Log.w(TAG, "Cached transcoded file $id has no audio track. Deleting stale silent cache.")
+                file.delete()
+                doneMarker.delete()
+                completedFiles.remove(id)
+                return null
+            }
             completedFiles[id] = file
             return file
         }
@@ -95,7 +149,7 @@ object TranscoderManager {
     fun canDeviceDecodeAudio(mimeType: String): Boolean {
         if (mimeType.isEmpty()) return true
         return try {
-            val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+            val codecList = MediaCodecList(MediaCodecList.ALL_CODECS)
             codecList.codecInfos.any { info ->
                 !info.isEncoder && info.supportedTypes.any { it.equals(mimeType, ignoreCase = true) }
             }
@@ -109,7 +163,23 @@ object TranscoderManager {
         var extractor: MediaExtractor? = null
         try {
             extractor = MediaExtractor()
-            extractor.setDataSource(context, uri, null)
+            if (uri.scheme == "file") {
+                extractor.setDataSource(uri.path ?: "")
+            } else {
+                val pfd = try {
+                    context.contentResolver.openFileDescriptor(uri, "r")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to open PFD for $uri: ${e.message}")
+                    null
+                }
+                if (pfd != null) {
+                    pfd.use {
+                        extractor.setDataSource(it.fileDescriptor)
+                    }
+                } else {
+                    extractor.setDataSource(context, uri, null)
+                }
+            }
             for (i in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(i)
                 val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
@@ -192,12 +262,12 @@ object TranscoderManager {
         inProgress[media.id] = 0
 
         val audioTracks = getAudioTrackInfos(context, media.uri)
-        val hasAudio = audioTracks.isNotEmpty()
+        val hasAudio = audioTracks.isNotEmpty() || media.audioCodec.isNotEmpty()
         val primaryAudioMime = audioTracks.firstOrNull()?.mimeType ?: media.audioCodec
         val canDecodePrimary = canDeviceDecodeAudio(primaryAudioMime)
         val hasDecodableAudio = audioTracks.any { it.isDecodable }
 
-        Log.i(TAG, "Transcode audio config for '${media.title}': tracks=${audioTracks.size}, " +
+        Log.i(TAG, "Transcode audio config for '${media.title}': tracks=${audioTracks.size}, hasAudio=$hasAudio, " +
                 "primary=$primaryAudioMime, canDecodePrimary=$canDecodePrimary, " +
                 "hasDecodableAudio=$hasDecodableAudio, forceRemoveAudio=$forceRemoveAudio")
 
@@ -229,15 +299,10 @@ object TranscoderManager {
             .setEncoderFactory(encoderFactory)
             .setVideoMimeType(MimeTypes.VIDEO_H264)
 
-        // Case A (Snapdragon or phone with decoder for primary audio format):
-        // Preserves 100% existing Snapdragon behavior by transcoding audio to pristine AAC.
-        // Step 2: Multi-track fallback - if primary is undecodable on this chipset but a decodable audio track exists (e.g. AAC), transcode to AAC.
-        if (!forceRemoveAudio && hasAudio && (canDecodePrimary || hasDecodableAudio)) {
+        // Always request AAC audio encoding when audio is preserved, so Snapdragon and any device with an audio
+        // decoder transcode audio into pristine AAC for universal TV playback.
+        if (!forceRemoveAudio) {
             transformerBuilder.setAudioMimeType(MimeTypes.AUDIO_AAC)
-        } else {
-            // Step 1: Smart Passthrough - phone lacks an audio decoder for this format (e.g. MediaTek Helio G95 with E-AC-3).
-            // Do NOT force AAC encoding! Transformer will attempt direct audio passthrough (transmuxing) without decoding.
-            Log.i(TAG, "Smart audio passthrough engaged (no AAC audio transcode forced)")
         }
 
         val transformer = transformerBuilder
@@ -330,16 +395,12 @@ object TranscoderManager {
             }
 
             val editedMediaItem = androidx.media3.transformer.EditedMediaItem.Builder(inputMediaItem)
-                .setRemoveAudio(forceRemoveAudio || !hasAudio)
+                .setRemoveAudio(forceRemoveAudio)
                 .build()
             val sequence = androidx.media3.transformer.EditedMediaItemSequence(editedMediaItem)
-            val compBuilder = Composition.Builder(sequence)
+            val composition = Composition.Builder(sequence)
                 .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_MEDIACODEC)
-
-            if (!forceRemoveAudio && hasAudio && !canDecodePrimary) {
-                compBuilder.setTransmuxAudio(true)
-            }
-            val composition = compBuilder.build()
+                .build()
 
             transformer.start(composition, outputFile.absolutePath)
 

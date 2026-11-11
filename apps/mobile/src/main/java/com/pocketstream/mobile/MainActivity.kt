@@ -229,6 +229,7 @@ class MainActivity : AppCompatActivity() {
         binding.layoutScanProgress.visibility = View.VISIBLE
         binding.tvScanProgress.text = "Loading media library..."
         lifecycleScope.launch(Dispatchers.IO) {
+            TranscoderManager.purgeStaleSilentCache(applicationContext)
             MediaRepository.init(applicationContext)
             withContext(Dispatchers.Main) {
                 binding.layoutScanProgress.visibility = View.GONE
