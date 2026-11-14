@@ -728,20 +728,8 @@ class MainActivity : AppCompatActivity() {
             } else {
                 withContext(Dispatchers.Main) {
                     android.util.Log.w("MainActivity", "fetchLibrary failed after 4 retries: ${lastError?.message}")
-                    if (phoneBaseUrl.isNotEmpty()) {
-                        val displayName = if (connectedPhoneName.isNotEmpty()) connectedPhoneName else "Phone"
-                        updatePhoneConnectionUi(true, "Connected to $displayName (Server unreachable)")
-                        if (adapter.itemCount == 0) {
-                            binding.tvTvEmptyNotice.text = "Could not fetch library from phone. Check if media server is running."
-                            binding.tvTvEmptyNotice.visibility = View.VISIBLE
-                        }
-                    } else {
-                        updatePhoneConnectionUi(false, "Phone disconnected")
-                        binding.tvTvEmptyNotice.text = "Phone disconnected. Tap 'Pair Phone (QR Code)' above or start server on phone."
-                        binding.tvTvEmptyNotice.visibility = View.VISIBLE
-                        binding.rvTvMediaList.visibility = View.GONE
-                        adapter.updateList(emptyList())
-                    }
+                    onPhoneDisconnected()
+                    showQrPairDialog()
                 }
             }
         }
@@ -767,7 +755,7 @@ class MainActivity : AppCompatActivity() {
         val caps = com.pocketstream.tv.util.TvCapabilityDetector.getCapabilities()
         val capsSummary = "TV Display: ${caps.maxWidth}x${caps.maxHeight} | 8-bit HW Decoder"
         tvAddress.text = "TV IP: $localIp:8085"
-        tvStatus.text = if (phoneBaseUrl.isNotEmpty()) "Connected to $connectedPhoneName\n$capsSummary" else "Waiting for phone to scan or discover...\n$capsSummary"
+        tvStatus.text = if (phoneBaseUrl.isNotEmpty()) "Connected to $connectedPhoneName\n$capsSummary" else "Please scan this QR code from the PocketStream mobile app to pair your phone.\n$capsSummary"
 
         qrDialog?.dismiss()
         val dialog = AlertDialog.Builder(this)
@@ -819,7 +807,7 @@ class MainActivity : AppCompatActivity() {
             .apply()
 
         updatePhoneConnectionUi(false, "Phone disconnected")
-        binding.tvTvEmptyNotice.text = "Phone disconnected. Please start the media server on your phone."
+        binding.tvTvEmptyNotice.text = "Phone disconnected. Please scan the QR code to pair your phone."
         binding.tvTvEmptyNotice.visibility = View.VISIBLE
         binding.rvTvMediaList.visibility = View.GONE
         adapter.updateList(emptyList())
@@ -833,10 +821,36 @@ class MainActivity : AppCompatActivity() {
     private fun startHealthCheck() {
         healthCheckJob?.cancel()
         healthCheckJob = CoroutineScope(Dispatchers.IO).launch {
+            var consecutiveFailures = 0
             while (isActive) {
-                kotlinx.coroutines.delay(10000)
-                // Connection is kept alive until user disconnects manually or phone sends explicit disconnect.
-                // We do NOT drop connection automatically on failed pings.
+                kotlinx.coroutines.delay(8000)
+                if (phoneBaseUrl.isNotEmpty() && !isPlaying && binding.layoutPlayer.visibility != View.VISIBLE) {
+                    var reachable = false
+                    try {
+                        val req = Request.Builder()
+                            .url("$phoneBaseUrl/api/v1/status")
+                            .build()
+                        val res = httpClient.newCall(req).execute()
+                        reachable = res.isSuccessful
+                        res.close()
+                    } catch (_: Exception) {
+                        reachable = false
+                    }
+                    if (!reachable) {
+                        consecutiveFailures++
+                        if (consecutiveFailures >= 2 && phoneBaseUrl.isNotEmpty()) {
+                            withContext(Dispatchers.Main) {
+                                android.util.Log.w("MainActivity", "Server unreachable in health check. Auto-disconnecting and showing QR pair dialog.")
+                                onPhoneDisconnected()
+                                showQrPairDialog()
+                            }
+                        }
+                    } else {
+                        consecutiveFailures = 0
+                    }
+                } else {
+                    consecutiveFailures = 0
+                }
             }
         }
     }
