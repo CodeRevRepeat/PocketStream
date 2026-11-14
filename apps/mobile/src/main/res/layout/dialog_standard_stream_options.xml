@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog_compatibility"
+    android:padding="22dp">
+
+    <!-- Header Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <ImageView
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:src="@drawable/ic_compat_tv"
+            android:layout_marginEnd="12dp"
+            android:contentDescription="TV" />
+
+        <TextView
+            android:id="@+id/tvStreamOptionsHeader"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Stream to TV"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:fontFamily="sans-serif-medium"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Filename Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="18dp">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_compat_video"
+            android:layout_marginEnd="12dp"
+            android:contentDescription="Video" />
+
+        <TextView
+            android:id="@+id/tvStreamOptionsFilename"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Video Title"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="2"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <!-- Option 1: Direct Play (Electric Lime Pill) -->
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btnOptionDirectPlay"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:background="@drawable/bg_btn_lime_pill"
+        android:text="▶   Direct Play (Original Quality)"
+        android:textColor="#000000"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textAllCaps="false"
+        android:stateListAnimator="@null"
+        android:elevation="0dp"
+        android:layout_marginBottom="10dp" />
+
+    <!-- Option 2: Live Encode & Stream (Dark Outline Pill) -->
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btnOptionEncodeStream"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_btn_dark_outline_pill"
+        android:text="▷   Live Encode &amp; Stream (Hardware Transcoder)"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:textAllCaps="false"
+        android:stateListAnimator="@null"
+        android:elevation="0dp"
+        android:layout_marginBottom="10dp" />
+
+    <!-- Row for Play Locally & Copy URL -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="10dp">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnOptionPlayLocal"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_btn_dark_outline_pill"
+            android:text="Play Locally"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp"
+            android:textAllCaps="false"
+            android:stateListAnimator="@null"
+            android:elevation="0dp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnOptionCopyUrl"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_btn_dark_outline_pill"
+            android:text="Copy Stream URL"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp"
+            android:textAllCaps="false"
+            android:stateListAnimator="@null"
+            android:elevation="0dp" />
+    </LinearLayout>
+
+    <!-- Cancel Button -->
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btnOptionCancel"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="@drawable/bg_btn_dark_outline_pill"
+        android:text="Cancel"
+        android:textColor="#94A3B8"
+        android:textSize="13sp"
+        android:textAllCaps="false"
+        android:stateListAnimator="@null"
+        android:elevation="0dp" />
+
+</LinearLayout>

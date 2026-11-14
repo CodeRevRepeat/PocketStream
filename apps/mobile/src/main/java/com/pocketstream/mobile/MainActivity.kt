@@ -134,12 +134,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var statusBarHeightPx: Int = 0
-    private var navBarHeightPx: Int = 0
+    private var insetTopPx: Int = 0
+    private var insetBottomPx: Int = 0
+    private var insetLeftPx: Int = 0
+    private var insetRightPx: Int = 0
     private var periodicTvPollJob: Job? = null
 
     private fun getStatusBarHeight(): Int {
-        if (statusBarHeightPx > 0) return statusBarHeightPx
+        if (insetTopPx > 0) return insetTopPx
         var result = 0
         val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
         if (resourceId > 0) {
@@ -155,20 +157,34 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.rootContainer) { _, insets ->
-            val sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val sysBars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
             var changed = false
-            if (sysBars.top > 0 && sysBars.top != statusBarHeightPx) {
-                statusBarHeightPx = sysBars.top
+            if (sysBars.top != insetTopPx) {
+                insetTopPx = sysBars.top
                 changed = true
             }
-            if (sysBars.bottom != navBarHeightPx) {
-                navBarHeightPx = sysBars.bottom
+            if (sysBars.bottom != insetBottomPx) {
+                insetBottomPx = sysBars.bottom
+                changed = true
+            }
+            if (sysBars.left != insetLeftPx) {
+                insetLeftPx = sysBars.left
+                changed = true
+            }
+            if (sysBars.right != insetRightPx) {
+                insetRightPx = sysBars.right
                 changed = true
             }
             if (changed) {
                 updateLayoutForOrientation(resources.configuration.orientation)
             }
             insets
+        }
+
+        binding.rootContainer.post {
+            ViewCompat.requestApplyInsets(binding.rootContainer)
         }
 
         updateLayoutForOrientation(resources.configuration.orientation)
@@ -243,6 +259,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        ViewCompat.requestApplyInsets(binding.rootContainer)
         updateLayoutForOrientation(newConfig.orientation)
     }
 
@@ -262,13 +279,24 @@ class MainActivity : AppCompatActivity() {
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
 
-        val statusBarTop = getStatusBarHeight()
-        val extraTopMargin = dp(8)
-        val navBarBottom = navBarHeightPx
+        val rootInsets = ViewCompat.getRootWindowInsets(binding.rootContainer)?.getInsets(
+            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+        )
+        if (rootInsets != null) {
+            insetTopPx = rootInsets.top
+            insetBottomPx = rootInsets.bottom
+            insetLeftPx = rootInsets.left
+            insetRightPx = rootInsets.right
+        }
+
+        val statusBarTop = if (insetTopPx > 0) insetTopPx else getStatusBarHeight()
 
         if (isLandscape) {
-            val bottomPad = navBarBottom + dp(8)
-            binding.rootContainer.setPadding(dp(12), dp(6), dp(12), bottomPad)
+            val leftPad = insetLeftPx + dp(12)
+            val topPad = statusBarTop + dp(6)
+            val rightPad = insetRightPx + dp(12)
+            val bottomPad = insetBottomPx + dp(6)
+            binding.rootContainer.setPadding(leftPad, topPad, rightPad, bottomPad)
             binding.mainContentLayout.orientation = LinearLayout.HORIZONTAL
 
             val leftParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.0f).apply {
@@ -288,8 +316,11 @@ class MainActivity : AppCompatActivity() {
                 binding.cardNowPlaying.layoutParams = lp
             }
         } else {
-            val bottomPad = navBarBottom + dp(18)
-            binding.rootContainer.setPadding(dp(16), statusBarTop + extraTopMargin, dp(16), bottomPad)
+            val leftPad = insetLeftPx + dp(16)
+            val topPad = statusBarTop + dp(8)
+            val rightPad = insetRightPx + dp(16)
+            val bottomPad = insetBottomPx + dp(18)
+            binding.rootContainer.setPadding(leftPad, topPad, rightPad, bottomPad)
             binding.mainContentLayout.orientation = LinearLayout.VERTICAL
 
             val leftParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 0f).apply {
@@ -991,36 +1022,59 @@ class MainActivity : AppCompatActivity() {
         val localMedia = MediaRepository.getMediaById(item.id)
         val streamUrl = "http://$localIp:${ServerService.serverPort}${item.streamPath}"
         val targetLabel = if (connectedTvIp.isNotEmpty()) "$connectedTvName ($connectedTvIp)" else "TV"
-        val options = arrayOf(
-            "Direct Play on $targetLabel (Original Quality)",
-            "Live Encode & Stream (Hardware Transcoder)",
-            "Play Locally (Preview)",
-            "Copy Stream URL"
-        )
 
-        AlertDialog.Builder(this)
-            .setTitle(item.title)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> sendStreamToTv(streamUrl, item.title, item.id, item.durationMs)
-                    1 -> {
-                        if (localMedia != null) {
-                            startLiveStreamingAndTranscoding(localMedia, localIp)
-                        } else {
-                            sendStreamToTv(streamUrl, item.title, item.id, item.durationMs)
-                        }
-                    }
-                    2 -> {
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(Uri.parse(streamUrl), item.mimeType)
-                        }
-                        startActivity(intent)
-                    }
-                    3 -> copyUrl(streamUrl)
-                }
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_standard_stream_options, null)
+        val tvHeader = dialogView.findViewById<TextView>(R.id.tvStreamOptionsHeader)
+        val tvFilename = dialogView.findViewById<TextView>(R.id.tvStreamOptionsFilename)
+        val btnDirectPlay = dialogView.findViewById<Button>(R.id.btnOptionDirectPlay)
+        val btnEncodeStream = dialogView.findViewById<Button>(R.id.btnOptionEncodeStream)
+        val btnPlayLocal = dialogView.findViewById<Button>(R.id.btnOptionPlayLocal)
+        val btnCopyUrl = dialogView.findViewById<Button>(R.id.btnOptionCopyUrl)
+        val btnCancel = dialogView.findViewById<Button>(R.id.btnOptionCancel)
+
+        tvHeader.text = if (connectedTvName.isNotEmpty()) "Stream to $connectedTvName" else "Stream to TV"
+        tvFilename.text = item.title
+        btnDirectPlay.text = "▶   Direct Play on $targetLabel (Original Quality)"
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnDirectPlay.setOnClickListener {
+            dialog.dismiss()
+            sendStreamToTv(streamUrl, item.title, item.id, item.durationMs)
+        }
+
+        btnEncodeStream.setOnClickListener {
+            dialog.dismiss()
+            if (localMedia != null) {
+                startLiveStreamingAndTranscoding(localMedia, localIp)
+            } else {
+                sendStreamToTv(streamUrl, item.title, item.id, item.durationMs)
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
+
+        btnPlayLocal.setOnClickListener {
+            dialog.dismiss()
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(Uri.parse(streamUrl), item.mimeType)
+            }
+            startActivity(intent)
+        }
+
+        btnCopyUrl.setOnClickListener {
+            dialog.dismiss()
+            copyUrl(streamUrl)
+        }
+
+        btnCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
     private fun copyUrl(url: String) {
