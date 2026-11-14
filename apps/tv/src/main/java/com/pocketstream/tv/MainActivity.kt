@@ -110,25 +110,10 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Restore last known phone connection
-        val prefs = getSharedPreferences("pocketstream_tv_prefs", MODE_PRIVATE)
-        val savedIp = prefs.getString("last_phone_ip", null)
-        val savedPort = prefs.getInt("last_phone_port", 8080)
-        val savedName = prefs.getString("last_phone_name", "PocketStream Phone") ?: "PocketStream Phone"
-        val savedSid = prefs.getString("tv_session_id", null)
-        val savedKey = prefs.getString("tv_session_key", null)
-
-        if (!savedIp.isNullOrEmpty() && !savedSid.isNullOrEmpty() && !savedKey.isNullOrEmpty()) {
-            tvSessionId = savedSid
-            tvSessionKey = savedKey
-            phoneBaseUrl = "http://$savedIp:$savedPort"
-            connectedPhoneName = savedName
-            updatePhoneConnectionUi(true, "Connected to $savedName ($savedIp:$savedPort)")
-        } else {
-            tvSessionId = java.util.UUID.randomUUID().toString().substring(0, 8)
-            tvSessionKey = com.pocketstream.protocol.AuthProtocol.generateSecureKey()
-            updatePhoneSearchingUi("Searching for phone or scan QR...")
-        }
+        // Do not auto-connect to last phone on startup; require explicit pairing via QR code
+        tvSessionId = java.util.UUID.randomUUID().toString().substring(0, 8)
+        tvSessionKey = com.pocketstream.protocol.AuthProtocol.generateSecureKey()
+        updatePhoneSearchingUi("Please scan QR code to pair your phone")
 
         setupRecyclerView()
         setupPlayer()
@@ -139,6 +124,8 @@ class MainActivity : AppCompatActivity() {
 
         if (phoneBaseUrl.isNotEmpty()) {
             fetchLibrary()
+        } else {
+            showQrPairDialog()
         }
     }
 
@@ -736,6 +723,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showQrPairDialog() {
+        if (isFinishing || isDestroyed) return
+        if (qrDialog?.isShowing == true) return
+
         val localIp = discoveryManager?.getLocalIpAddress() ?: "127.0.0.1"
         val tvDeviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim().ifEmpty { "Android TV" }
         val tvInfo = TvInfo(ip = localIp, port = 8085, name = tvDeviceName, sessionId = tvSessionId, sessionKey = tvSessionKey)
@@ -794,6 +784,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onPhoneDisconnected() {
+        if (phoneBaseUrl.isEmpty()) return
         phoneBaseUrl = ""
         connectedPhoneName = ""
         tvSessionId = java.util.UUID.randomUUID().toString().substring(0, 8)
@@ -862,15 +853,12 @@ class MainActivity : AppCompatActivity() {
             tvPort = 8085,
             getConnectedPhoneIp = { getConnectedPhoneIp() },
             onPhoneDiscovered = { phoneIp, phonePort, name ->
-                runOnUiThread {
-                    if (phoneBaseUrl.isEmpty()) {
-                        onPhoneConnected(phoneIp, phonePort, name)
-                    }
-                }
+                // Do NOT auto-connect. Pairing must happen strictly via QR code scan (/pair endpoint).
             },
             onPhoneDisconnected = {
                 runOnUiThread {
                     onPhoneDisconnected()
+                    showQrPairDialog()
                 }
             }
         )
