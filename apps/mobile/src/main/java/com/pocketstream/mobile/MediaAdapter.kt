@@ -23,6 +23,16 @@ class MediaAdapter(
     var activeStreamingId: String? = null
         private set
 
+    var isTvPaired: Boolean = false
+        private set
+
+    fun setTvPaired(paired: Boolean) {
+        if (isTvPaired != paired) {
+            isTvPaired = paired
+            notifyDataSetChanged()
+        }
+    }
+
     fun setActiveStreamingId(id: String?) {
         activeStreamingId = id
         notifyDataSetChanged()
@@ -129,6 +139,8 @@ class MediaAdapter(
 
                 val isStreaming = (item.id == activeStreamingId)
                 if (isStreaming) {
+                    binding.btnStreamToTv.isEnabled = true
+                    binding.btnStreamToTv.alpha = 1.0f
                     binding.btnStreamToTv.text = "Stop Stream"
                     binding.btnStreamToTv.setTextColor(Color.WHITE)
                     binding.btnStreamToTv.strokeWidth = 0
@@ -146,11 +158,25 @@ class MediaAdapter(
                     binding.btnStreamToTv.strokeWidth = 0
                     binding.btnStreamToTv.strokeColor = ColorStateList.valueOf(Color.TRANSPARENT)
                     binding.btnStreamToTv.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#7C3AED")) // Purple
-                    binding.btnStreamToTv.setOnClickListener {
-                        onStreamClick(item)
-                    }
-                    binding.cardMediaRoot.setOnClickListener {
-                        onStreamClick(item)
+
+                    if (isTvPaired) {
+                        binding.btnStreamToTv.isEnabled = true
+                        binding.btnStreamToTv.alpha = 1.0f
+                        binding.btnStreamToTv.setOnClickListener {
+                            onStreamClick(item)
+                        }
+                        binding.cardMediaRoot.setOnClickListener {
+                            onStreamClick(item)
+                        }
+                    } else {
+                        binding.btnStreamToTv.isEnabled = false
+                        binding.btnStreamToTv.alpha = 0.4f
+                        binding.btnStreamToTv.setOnClickListener {
+                            android.widget.Toast.makeText(binding.root.context, "Scan TV QR code to pair first", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        binding.cardMediaRoot.setOnClickListener {
+                            android.widget.Toast.makeText(binding.root.context, "Scan TV QR code to pair first", android.widget.Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             }

@@ -81,12 +81,13 @@ class MainActivity : AppCompatActivity() {
     private var connectedTvSessionKey: String = ""
     private var tvCapabilities: TvCapabilities = TvCapabilities.DEFAULT_1080P
     private var discoveryManager: MobileDiscoveryManager? = null
-    private var isTvPaired: Boolean = false
+    var isTvPaired: Boolean = false
+        private set
 
     private val prefs by lazy { getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE) }
-    fun resolvedTvIp(): String = connectedTvIp.ifEmpty { prefs.getString("last_tv_ip", "") ?: "" }
-    private fun resolvedTvSessionKey(): String = connectedTvSessionKey.ifEmpty { prefs.getString("last_tv_key", "") ?: "" }
-    private fun resolvedTvSessionId(): String = connectedTvSessionId.ifEmpty { prefs.getString("last_tv_sid", "") ?: "" }
+    fun resolvedTvIp(): String = if (isTvPaired) connectedTvIp else ""
+    private fun resolvedTvSessionKey(): String = if (isTvPaired) connectedTvSessionKey else ""
+    private fun resolvedTvSessionId(): String = if (isTvPaired) connectedTvSessionId else ""
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -206,34 +207,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Restore last known TV connection
-        val savedTvIp = prefs.getString("last_tv_ip", null)
-        val savedTvPort = prefs.getInt("last_tv_port", 8085)
-        val savedTvName = prefs.getString("last_tv_name", "Android TV") ?: "Android TV"
-
-        val savedTvCapsJson = prefs.getString("last_tv_caps", null)
-        if (!savedTvCapsJson.isNullOrEmpty()) {
-            try {
-                tvCapabilities = TvCapabilities.fromJson(JSONObject(savedTvCapsJson))
-            } catch (_: Exception) {}
-        }
-
-        val hasSavedKey = resolvedTvSessionKey().isNotEmpty()
-        if (!savedTvIp.isNullOrEmpty() && hasSavedKey) {
-            connectedTvIp = savedTvIp
-            connectedTvPort = savedTvPort
-            connectedTvName = savedTvName
-            updateTvTargetUI(connectedTvIp, connectedTvPort, connectedTvName, isPaired = true)
-            fetchTvCapabilities(connectedTvIp, connectedTvPort)
-            sendPairHandshake(connectedTvIp, connectedTvPort)
-            syncTvPlaybackStatus()
-        } else {
-            updateTvTargetUI("", 8085, "", isPaired = false)
-        }
-
         setupRecyclerView()
         setupListeners()
         setupDiscovery()
+
+        // Do NOT auto-connect to TV on app startup. Must scan QR code to pair.
+        connectedTvIp = ""
+        connectedTvPort = 8085
+        connectedTvName = ""
+        connectedTvSessionId = ""
+        connectedTvSessionKey = ""
+        updateTvTargetUI("", 8085, "", isPaired = false)
         updateServerUI()
         checkNotificationPermission()
 
@@ -513,6 +497,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupListeners() {
         binding.btnScanTvQr.setOnClickListener {
+            if (isTvPaired) {
+                onTvExplicitlyDisconnected()
+                return@setOnClickListener
+            }
             val options = ScanOptions().apply {
                 setPrompt("Scan the QR code displayed on your TV")
                 setBeepEnabled(true)
@@ -523,8 +511,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnToggleServer.setOnClickListener {
-            if (!isTvPaired && !ServerService.isServerRunning) {
-                Toast.makeText(this, "Please pair with TV first", Toast.LENGTH_SHORT).show()
+            if (!isTvPaired) {
+                Toast.makeText(this, "Please scan TV QR code to pair first", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             val shouldStart = !ServerService.isServerRunning
@@ -733,8 +721,8 @@ class MainActivity : AppCompatActivity() {
         if (isRunning) {
             binding.tvStatusBadge.text = "RUNNING"
             binding.tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
-            binding.btnToggleServer.isEnabled = true
-            binding.btnToggleServer.alpha = 1.0f
+            binding.btnToggleServer.isEnabled = isTvPaired
+            binding.btnToggleServer.alpha = if (isTvPaired) 1.0f else 0.4f
             binding.btnToggleServer.text = "Stop"
             binding.tvServerAddress.text = url
         } else {
@@ -747,8 +735,8 @@ class MainActivity : AppCompatActivity() {
                 binding.tvServerAddress.text = "Server offline"
             } else {
                 binding.btnToggleServer.isEnabled = false
-                binding.btnToggleServer.alpha = 0.5f
-                binding.tvServerAddress.text = "Pair with TV to start server"
+                binding.btnToggleServer.alpha = 0.4f
+                binding.tvServerAddress.text = "Scan TV QR to pair"
             }
         }
     }
@@ -770,6 +758,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleStreamSelection(item: MediaItem) {
+        if (!isTvPaired) {
+            Toast.makeText(this, "Please scan TV QR code to pair first", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (!ServerService.isServerRunning) {
             Toast.makeText(this, "Starting media server", Toast.LENGTH_SHORT).show()
 
@@ -1380,30 +1372,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onTvDiscovered(tvIp: String, tvPort: Int, tvName: String) {
-        val hasKey = resolvedTvSessionKey().isNotEmpty()
-        val savedIp = prefs.getString("last_tv_ip", null)
-        val isAlreadyPairedWithThisTv = hasKey && !savedIp.isNullOrEmpty() && isSameIp(savedIp, tvIp)
-
-        if (!isAlreadyPairedWithThisTv) {
+        if (!isTvPaired) {
+            // Do NOT auto connect to TV. User must scan QR code to pair.
             return
         }
-
-        connectedTvIp = tvIp
-        connectedTvPort = tvPort
-        connectedTvName = tvName
-        updateTvTargetUI(tvIp, tvPort, tvName, isPaired = true)
-
-        prefs.edit()
-            .putString("last_tv_ip", tvIp)
-            .putInt("last_tv_port", tvPort)
-            .putString("last_tv_name", tvName)
-            .apply()
-
-        // When auto-paired with TV, exchange handshake or fetch capabilities
-        if (ServerService.isServerRunning) {
-            sendPairHandshake(tvIp, tvPort)
-        } else {
-            fetchTvCapabilities(tvIp, tvPort)
+        if (isSameIp(connectedTvIp, tvIp)) {
+            connectedTvIp = tvIp
+            connectedTvPort = tvPort
+            if (tvName.isNotEmpty()) connectedTvName = tvName
+            updateTvTargetUI(tvIp, tvPort, connectedTvName, isPaired = true)
         }
     }
 
@@ -1414,14 +1391,19 @@ class MainActivity : AppCompatActivity() {
             val formatNotice = if (tvCapabilities.supports4K) "4K" else "1080p Max"
             binding.tvTvTargetStatus.text = "Connected ($tvIp:$tvPort) • $formatNotice"
             binding.tvTvTargetStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
-            binding.btnScanTvQr.isEnabled = false
-            binding.btnScanTvQr.alpha = 0.5f
+            binding.btnScanTvQr.text = "Disconnect"
+            binding.btnScanTvQr.isEnabled = true
+            binding.btnScanTvQr.alpha = 1.0f
         } else {
             binding.tvTvTargetName.text = "Target TV"
             binding.tvTvTargetStatus.text = "Scan to pair TV"
             binding.tvTvTargetStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            binding.btnScanTvQr.text = "Scan TV QR"
             binding.btnScanTvQr.isEnabled = true
             binding.btnScanTvQr.alpha = 1.0f
+        }
+        if (::adapter.isInitialized) {
+            adapter.setTvPaired(isTvPaired)
         }
         updateServerUI()
     }
@@ -1561,8 +1543,10 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateServerUI()
-        syncTvPlaybackStatus()
-        startPeriodicTvPoll()
+        if (isTvPaired) {
+            syncTvPlaybackStatus()
+            startPeriodicTvPoll()
+        }
     }
 
     override fun onPause() {
@@ -1577,25 +1561,13 @@ class MainActivity : AppCompatActivity() {
         sessionId: String = "",
         sessionKey: String = ""
     ) {
-        if (tvIp.isEmpty()) return
+        if (tvIp.isEmpty() || !isTvPaired) return
         runOnUiThread {
             connectedTvIp = tvIp
             connectedTvPort = tvPort
             if (tvName.isNotEmpty()) connectedTvName = tvName
             if (sessionId.isNotEmpty()) connectedTvSessionId = sessionId
             if (sessionKey.isNotEmpty()) connectedTvSessionKey = sessionKey
-            isTvPaired = true
-            prefs.edit()
-                .putString("last_tv_ip", connectedTvIp)
-                .putInt("last_tv_port", connectedTvPort)
-                .putString("last_tv_name", connectedTvName)
-                .apply()
-            if (connectedTvSessionKey.isNotEmpty()) {
-                prefs.edit()
-                    .putString("last_tv_sid", connectedTvSessionId)
-                    .putString("last_tv_key", connectedTvSessionKey)
-                    .apply()
-            }
             updateTvTargetUI(connectedTvIp, connectedTvPort, connectedTvName, isPaired = true)
             updateServerUI()
         }
@@ -1611,6 +1583,7 @@ class MainActivity : AppCompatActivity() {
         sessionId: String = "",
         sessionKey: String = ""
     ) {
+        if (!isTvPaired) return
         runOnUiThread {
             if (tvIp.isNotEmpty()) {
                 connectedTvIp = tvIp
@@ -1618,18 +1591,6 @@ class MainActivity : AppCompatActivity() {
                 if (tvName.isNotEmpty()) connectedTvName = tvName
                 if (sessionId.isNotEmpty()) connectedTvSessionId = sessionId
                 if (sessionKey.isNotEmpty()) connectedTvSessionKey = sessionKey
-                isTvPaired = true
-                prefs.edit()
-                    .putString("last_tv_ip", connectedTvIp)
-                    .putInt("last_tv_port", connectedTvPort)
-                    .putString("last_tv_name", connectedTvName)
-                    .apply()
-                if (connectedTvSessionKey.isNotEmpty()) {
-                    prefs.edit()
-                        .putString("last_tv_sid", connectedTvSessionId)
-                        .putString("last_tv_key", connectedTvSessionKey)
-                        .apply()
-                }
                 updateTvTargetUI(connectedTvIp, connectedTvPort, connectedTvName, isPaired = true)
                 updateServerUI()
             }

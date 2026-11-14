@@ -73,7 +73,9 @@ class PocketHttpServer(
                 val tvKey = session.headers["x-ps-tv-key"] ?: ""
                 if (tvIp.isNotEmpty() && tvKey.isNotEmpty()) {
                     mainHandler.post {
-                        MainActivity.instance?.onTvDiscoveredFromHttp(tvIp, tvPort, tvName, tvSid, tvKey)
+                        if (MainActivity.instance?.isTvPaired == true) {
+                            MainActivity.instance?.onTvDiscoveredFromHttp(tvIp, tvPort, tvName, tvSid, tvKey)
+                        }
                     }
                 }
                 val items = MediaRepository.getAllMediaItems()
