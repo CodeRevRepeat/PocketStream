@@ -95,6 +95,8 @@ class MainActivity : AppCompatActivity() {
 
     private val qrScannerLauncher = registerForActivityResult(ScanContract()) { result ->
         if (result.contents != null) {
+            binding.layoutScanProgress.visibility = View.VISIBLE
+            binding.tvScanProgress.text = "QR code detected! Connecting to TV..."
             handleScannedQr(result.contents)
         }
     }
@@ -156,6 +158,11 @@ class MainActivity : AppCompatActivity() {
         instance = this
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        val appVersionName = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (_: Exception) { "1.2.1" }
+        binding.tvAppVersion.text = "v$appVersionName"
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.rootContainer) { _, insets ->
             val sysBars = insets.getInsets(
@@ -362,7 +369,8 @@ class MainActivity : AppCompatActivity() {
                         }
                         return@launch
                     }
-                    if (isPlaying || (pos > 0L && streamUrl.isNotEmpty() && statusTitle.isNotEmpty())) {
+                    val hasActiveTvStream = streamUrl.isNotEmpty() || statusTitle.isNotEmpty()
+                    if (isPlaying || hasActiveTvStream) {
                         withContext(Dispatchers.Main) {
                             tvIsPlaying = isPlaying
                             tvCurrentPosMs = pos
@@ -378,6 +386,15 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                             showNowPlaying(displayTitle, len)
+                            binding.cardNowPlaying.visibility = View.VISIBLE
+                            binding.btnRemotePlayPause.text = if (isPlaying) "Pause" else "Play"
+                            binding.tvNowPlayingBadge.text = if (isPlaying) "TV PLAYING" else if (pos == 0L) "STARTING" else "PAUSED"
+                            binding.tvNowPlayingBadge.setTextColor(
+                                ContextCompat.getColor(
+                                    this@MainActivity,
+                                    if (isPlaying) R.color.accent_green else R.color.text_muted
+                                )
+                            )
                             if (!isUserTrackingScrubber && tvTotalDurationMs > 0) {
                                 val progress = ((pos.toDouble() / tvTotalDurationMs.toDouble()) * 1000).toInt()
                                 binding.sbRemoteScrubber.progress = progress
@@ -386,7 +403,7 @@ class MainActivity : AppCompatActivity() {
                                 binding.tvNowPlayingTime.text = "$posStr / $lenStr"
                             }
                         }
-                    } else if (activeStreamingMediaId != null) {
+                    } else if (activeStreamingMediaId != null && !hasActiveTvStream) {
                         withContext(Dispatchers.Main) {
                             hideNowPlaying()
                         }
@@ -504,7 +521,8 @@ class MainActivity : AppCompatActivity() {
             val options = ScanOptions().apply {
                 setPrompt("Scan the QR code displayed on your TV")
                 setBeepEnabled(true)
-                setOrientationLocked(false)
+                setOrientationLocked(true)
+                setCaptureActivity(com.pocketstream.mobile.qr.PortraitCaptureActivity::class.java)
                 setBarcodeImageEnabled(false)
             }
             qrScannerLauncher.launch(options)
@@ -1092,6 +1110,11 @@ class MainActivity : AppCompatActivity() {
         val tvPort = connectedTvPort
         val tvApiUrl = "http://$tvIp:$tvPort/play"
 
+        // Optimistically display the control menu immediately upon stream start
+        activeStreamingMediaId = id
+        adapter.setActiveStreamingId(id)
+        showNowPlaying(title, durationMs)
+
         Toast.makeText(this, "Sending to TV at $tvIp...", Toast.LENGTH_SHORT).show()
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -1224,11 +1247,13 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
 
-                            if (!isPlaying && (pos == 0L || streamUrl.isEmpty() || statusTitle.isEmpty()) && activeStreamingMediaId != null) {
+                            val hasActiveTvStream = streamUrl.isNotEmpty() || statusTitle.isNotEmpty()
+                            if (!isPlaying && !hasActiveTvStream && activeStreamingMediaId != null) {
                                 hideNowPlaying()
                             } else {
+                                binding.cardNowPlaying.visibility = View.VISIBLE
                                 binding.btnRemotePlayPause.text = if (isPlaying) "Pause" else "Play"
-                                binding.tvNowPlayingBadge.text = if (isPlaying) "TV PLAYING" else "PAUSED"
+                                binding.tvNowPlayingBadge.text = if (isPlaying) "TV PLAYING" else if (pos == 0L) "STARTING" else "PAUSED"
                                 binding.tvNowPlayingBadge.setTextColor(
                                     ContextCompat.getColor(
                                         this@MainActivity,
@@ -1421,6 +1446,10 @@ class MainActivity : AppCompatActivity() {
         sessionId: String = connectedTvSessionId,
         sessionKey: String = connectedTvSessionKey
     ) {
+        lifecycleScope.launch(Dispatchers.Main) {
+            binding.layoutScanProgress.visibility = View.VISIBLE
+            binding.tvScanProgress.text = "Pairing with TV ($tvIp)..."
+        }
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val localIp = NetworkUtils.getLocalWifiIpAddress()
@@ -1465,6 +1494,7 @@ class MainActivity : AppCompatActivity() {
                         } catch (_: Exception) {}
                     }
                     withContext(Dispatchers.Main) {
+                        binding.layoutScanProgress.visibility = View.GONE
                         updateTvTargetUI(tvIp, tvPort, connectedTvName, isPaired = true)
                         Toast.makeText(this@MainActivity, "Paired with $connectedTvName!", Toast.LENGTH_SHORT).show()
                         if (!ServerService.isServerRunning) {
@@ -1475,10 +1505,19 @@ class MainActivity : AppCompatActivity() {
                     }
                 } else if (resCode == 401) {
                     withContext(Dispatchers.Main) {
+                        binding.layoutScanProgress.visibility = View.GONE
                         handleTvSessionExpired()
                     }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        binding.layoutScanProgress.visibility = View.GONE
+                    }
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.layoutScanProgress.visibility = View.GONE
+                }
+            }
         }
     }
 

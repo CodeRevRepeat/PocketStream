@@ -11,8 +11,8 @@ android {
         applicationId 'com.pocketstream.tv'
         minSdk 26
         targetSdk 36
-        versionCode 4
-        versionName '1.2.1'
+        versionCode project.findProperty("appVersionCode") ? project.property("appVersionCode").toInteger() : 4
+        versionName project.findProperty("appVersionName") ?: '1.2.1'
     }
 
     signingConfigs {

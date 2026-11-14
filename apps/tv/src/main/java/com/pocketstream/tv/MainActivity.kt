@@ -113,6 +113,11 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val appVersionName = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (_: Exception) { "1.2.1" }
+        binding.tvTvAppVersion.text = "v$appVersionName"
+
         // Do not auto-connect to last phone on startup; require explicit pairing via QR code
         tvSessionId = java.util.UUID.randomUUID().toString().substring(0, 8)
         tvSessionKey = com.pocketstream.protocol.AuthProtocol.generateSecureKey()

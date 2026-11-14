@@ -27,7 +27,7 @@ class PocketHttpServer(
 
     companion object {
         private const val TAG = "PocketHttpServer"
-        private const val STREAM_BUFFER_SIZE = 64 * 1024 // 64 KB buffer for high-bitrate video streaming
+        private const val STREAM_BUFFER_SIZE = 128 * 1024 // 128 KB buffer for balanced high-throughput streaming
         private val SAFE_MEDIA_ID_REGEX = Regex("^[a-zA-Z0-9_-]+$")
 
         fun cleanIp(ip: String?): String {

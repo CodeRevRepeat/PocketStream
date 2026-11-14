@@ -32,14 +32,32 @@
                 android:layout_weight="1"
                 android:orientation="vertical">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="POCKETSTREAM TV"
-                    android:textColor="@color/tv_accent_cyan"
-                    android:textSize="26sp"
-                    android:letterSpacing="0.08"
-                    android:textStyle="bold" />
+                    android:orientation="horizontal"
+                    android:gravity="bottom">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="POCKETSTREAM TV"
+                        android:textColor="@color/tv_accent_cyan"
+                        android:textSize="26sp"
+                        android:letterSpacing="0.08"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvTvAppVersion"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_marginBottom="3dp"
+                        android:text="v1.2.1"
+                        android:textColor="@color/tv_text_muted"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <TextView
                     android:layout_width="wrap_content"
