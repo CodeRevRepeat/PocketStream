@@ -44,6 +44,9 @@ class MainActivity : AppCompatActivity() {
     private var receiverServer: TvReceiverServer? = null
     private var discoveryManager: TvDiscoveryManager? = null
     private var qrDialog: AlertDialog? = null
+    private var qrDialogIvQr: ImageView? = null
+    private var qrDialogTvAddress: TextView? = null
+    private var qrDialogTvStatus: TextView? = null
     private var healthCheckJob: kotlinx.coroutines.Job? = null
 
     private val httpClient = OkHttpClient.Builder()
@@ -724,7 +727,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun showQrPairDialog() {
         if (isFinishing || isDestroyed) return
-        if (qrDialog?.isShowing == true) return
 
         val localIp = discoveryManager?.getLocalIpAddress() ?: "127.0.0.1"
         val tvDeviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim().ifEmpty { "Android TV" }
@@ -732,6 +734,18 @@ class MainActivity : AppCompatActivity() {
         val qrContent = tvInfo.toQrString()
         android.util.Log.i("MainActivity", "TV Pairing QR: $qrContent")
         val qrBitmap = QrUtils.generateQrBitmap(qrContent, 400)
+        val caps = com.pocketstream.tv.util.TvCapabilityDetector.getCapabilities()
+        val capsSummary = "TV Display: ${caps.maxWidth}x${caps.maxHeight} | 8-bit HW Decoder"
+        val statusText = if (phoneBaseUrl.isNotEmpty()) "Connected to $connectedPhoneName\n$capsSummary" else "Please scan this QR code from the PocketStream mobile app to pair your phone.\n$capsSummary"
+
+        if (qrDialog?.isShowing == true) {
+            if (qrBitmap != null) {
+                qrDialogIvQr?.setImageBitmap(qrBitmap)
+            }
+            qrDialogTvAddress?.text = "TV IP: $localIp:8085"
+            qrDialogTvStatus?.text = statusText
+            return
+        }
 
         val dialogView = layoutInflater.inflate(R.layout.dialog_qr_pair, null)
         val ivQr = dialogView.findViewById<ImageView>(R.id.ivTvQrCode)
@@ -739,21 +753,28 @@ class MainActivity : AppCompatActivity() {
         val tvStatus = dialogView.findViewById<TextView>(R.id.tvTvQrStatus)
         val btnClose = dialogView.findViewById<Button>(R.id.btnDismissQr)
 
+        qrDialogIvQr = ivQr
+        qrDialogTvAddress = tvAddress
+        qrDialogTvStatus = tvStatus
+
         if (qrBitmap != null) {
             ivQr.setImageBitmap(qrBitmap)
         }
-        val caps = com.pocketstream.tv.util.TvCapabilityDetector.getCapabilities()
-        val capsSummary = "TV Display: ${caps.maxWidth}x${caps.maxHeight} | 8-bit HW Decoder"
         tvAddress.text = "TV IP: $localIp:8085"
-        tvStatus.text = if (phoneBaseUrl.isNotEmpty()) "Connected to $connectedPhoneName\n$capsSummary" else "Please scan this QR code from the PocketStream mobile app to pair your phone.\n$capsSummary"
+        tvStatus.text = statusText
 
-        qrDialog?.dismiss()
         val dialog = AlertDialog.Builder(this)
             .setView(dialogView)
             .setCancelable(true)
             .create()
 
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.setOnDismissListener {
+            qrDialog = null
+            qrDialogIvQr = null
+            qrDialogTvAddress = null
+            qrDialogTvStatus = null
+        }
         btnClose.setOnClickListener {
             dialog.dismiss()
         }

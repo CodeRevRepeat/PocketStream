@@ -86,8 +86,8 @@ class MainActivity : AppCompatActivity() {
 
     private val prefs by lazy { getSharedPreferences("pocketstream_mobile_prefs", MODE_PRIVATE) }
     fun resolvedTvIp(): String = if (isTvPaired) connectedTvIp else ""
-    private fun resolvedTvSessionKey(): String = if (isTvPaired) connectedTvSessionKey else ""
-    private fun resolvedTvSessionId(): String = if (isTvPaired) connectedTvSessionId else ""
+    private fun resolvedTvSessionKey(): String = connectedTvSessionKey
+    private fun resolvedTvSessionId(): String = connectedTvSessionId
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -1255,10 +1255,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildAuthenticatedTvRequest(url: String, method: String, body: RequestBody?, bodyString: String = ""): Request {
+    private fun buildAuthenticatedTvRequest(
+        url: String,
+        method: String,
+        body: RequestBody?,
+        bodyString: String = "",
+        overrideKey: String? = null,
+        overrideSid: String? = null
+    ): Request {
         val builder = Request.Builder().url(url)
-        val key = resolvedTvSessionKey()
-        val sid = resolvedTvSessionId()
+        val key = overrideKey ?: resolvedTvSessionKey()
+        val sid = overrideSid ?: resolvedTvSessionId()
         val effectiveBodyString = if (bodyString.isEmpty() && method == "POST" && body == null) "{}" else bodyString
         if (key.isNotEmpty()) {
             val timestamp = System.currentTimeMillis() / 1000L
@@ -1358,7 +1365,7 @@ class MainActivity : AppCompatActivity() {
                 .putInt("last_tv_port", tvInfo.port)
                 .putString("last_tv_name", tvInfo.name)
                 .apply()
-            sendPairHandshake(tvInfo.ip, tvInfo.port)
+            sendPairHandshake(tvInfo.ip, tvInfo.port, tvInfo.sessionId, tvInfo.sessionKey)
         } else {
             Toast.makeText(this, "Unrecognized QR code", Toast.LENGTH_LONG).show()
         }
@@ -1408,12 +1415,18 @@ class MainActivity : AppCompatActivity() {
         updateServerUI()
     }
 
-    private fun sendPairHandshake(tvIp: String, tvPort: Int) {
+    private fun sendPairHandshake(
+        tvIp: String,
+        tvPort: Int,
+        sessionId: String = connectedTvSessionId,
+        sessionKey: String = connectedTvSessionKey
+    ) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val localIp = NetworkUtils.getLocalWifiIpAddress()
                 val phoneName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim().ifEmpty { "PocketStream Phone" }
-                val key = resolvedTvSessionKey()
+                val key = sessionKey
+                val sid = sessionId
                 val json = JSONObject().apply {
                     put("phoneIp", localIp)
                     put("phonePort", ServerService.serverPort)
@@ -1424,29 +1437,40 @@ class MainActivity : AppCompatActivity() {
                 }
                 val bodyStr = json.toString()
                 val body = bodyStr.toRequestBody("application/json".toMediaType())
-                val req = buildAuthenticatedTvRequest("http://$tvIp:$tvPort/pair", "POST", body, bodyStr)
+                val req = buildAuthenticatedTvRequest(
+                    url = "http://$tvIp:$tvPort/pair",
+                    method = "POST",
+                    body = body,
+                    bodyString = bodyStr,
+                    overrideKey = key,
+                    overrideSid = sid
+                )
                 val res = httpClient.newCall(req).execute()
                 val resCode = res.code
                 val isSuccess = res.isSuccessful
                 val resBody = res.body?.string() ?: ""
                 res.close()
-                if (isSuccess && resBody.isNotEmpty()) {
-                    val resJson = JSONObject(resBody)
-                    val capsJson = resJson.optJSONObject("capabilities")
-                    if (capsJson != null) {
-                        val parsed = TvCapabilities.fromJson(capsJson)
-                        tvCapabilities = parsed
-                        prefs.edit()
-                            .putString("last_tv_caps", capsJson.toString())
-                            .apply()
-                        withContext(Dispatchers.Main) {
-                            updateTvTargetUI(tvIp, tvPort, connectedTvName, isPaired = true)
-                            Toast.makeText(this@MainActivity, "Paired with $connectedTvName!", Toast.LENGTH_SHORT).show()
-                            if (!ServerService.isServerRunning) {
-                                toggleServerWithSpinner(start = true)
-                            } else {
-                                notifyTvLibraryUpdated()
+                if (isSuccess) {
+                    if (resBody.isNotEmpty()) {
+                        try {
+                            val resJson = JSONObject(resBody)
+                            val capsJson = resJson.optJSONObject("capabilities")
+                            if (capsJson != null) {
+                                val parsed = TvCapabilities.fromJson(capsJson)
+                                tvCapabilities = parsed
+                                prefs.edit()
+                                    .putString("last_tv_caps", capsJson.toString())
+                                    .apply()
                             }
+                        } catch (_: Exception) {}
+                    }
+                    withContext(Dispatchers.Main) {
+                        updateTvTargetUI(tvIp, tvPort, connectedTvName, isPaired = true)
+                        Toast.makeText(this@MainActivity, "Paired with $connectedTvName!", Toast.LENGTH_SHORT).show()
+                        if (!ServerService.isServerRunning) {
+                            toggleServerWithSpinner(start = true)
+                        } else {
+                            notifyTvLibraryUpdated()
                         }
                     }
                 } else if (resCode == 401) {

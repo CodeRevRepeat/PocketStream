@@ -137,9 +137,10 @@ class TvReceiverServer(
                     val phoneIp = json.getString("phoneIp")
                     val phonePort = json.optInt("phonePort", 8080)
                     val deviceName = json.optString("deviceName", "PocketStream Phone")
-                    val clientKey = json.optString("sessionKey", "")
+                    val clientKey = json.optString("sessionKey", "").trim()
 
-                    val activeKey = getSessionKey()
+                    val activeKey = getSessionKey().trim()
+                    Log.i(TAG, "Pair attempt: clientKey='$clientKey' vs activeKey='$activeKey', postData='$postData'")
                     val isAuthed = activeKey.isEmpty() || clientKey == activeKey || verifyRequest(session, postData)
                     if (!isAuthed) {
                         recordFailedAttempt(clientIp)
